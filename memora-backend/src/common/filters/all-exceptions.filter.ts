@@ -33,7 +33,11 @@ function codeForStatus(status: number): string {
 function codeForException(exception: unknown, status: number): string {
   if (exception instanceof HttpException) {
     const body = exception.getResponse();
-    if (body && typeof body === 'object' && typeof (body as { code?: unknown }).code === 'string') {
+    if (
+      body &&
+      typeof body === 'object' &&
+      typeof (body as { code?: unknown }).code === 'string'
+    ) {
       return (body as { code: string }).code;
     }
   }

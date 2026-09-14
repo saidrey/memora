@@ -40,6 +40,24 @@ carpeta (ahí se documenta el avance porque `specs/` no se edita).
 - Módulos que necesiten reusar `SessionAuthGuard` deben importar
   `AuthModule`, que exporta tanto el guard como `SessionTokenService` (su
   dependencia). Exportar solo el guard rompe la DI en el módulo consumidor.
+- **Endpoints batch con ownership por entrada** (spec07-disponibilidad.md,
+  `POST /photos/availability`): cuando un body trae un array de entradas
+  que cada una necesita su propio check de `requireOwned`, NO se usa
+  `requireOwned` (que lanza) por entrada — se resuelve `findById` +
+  comparación de `ownerId` inline y se hace `continue` en silencio si no
+  aplica. Objetivo: una entrada ajena/inexistente no debe romper el resto
+  del batch ni revelar (con un 404 parcial) que ese id existe. La
+  validación de **forma** del body (que `reports` sea un array, que cada
+  entrada tenga los campos esperados) sí sigue siendo un 400 normal — solo
+  la ownership por entrada es "silenciosa"; no confundir ambos niveles.
+- **Repositorio in-memory: métodos de "update" que asumen existencia ya
+  comprobada** (p. ej. `InMemoryPhotoRepository.updateAvailability`, mismo
+  patrón que `InMemoryAlbumRepository.rename`): un `requireX()` privado que
+  lanza un `Error` genérico (no `NotFoundException`) si el id no existe. Es
+  intencional que nunca debería dispararse en producción — el 404 real ya
+  lo lanzó la capa de servicio (`requireOwned`) antes de llamar al
+  repositorio; este throw es solo una red de seguridad de programación, no
+  un camino de error de negocio.
 
 ## Tests
 
@@ -61,6 +79,70 @@ carpeta (ahí se documenta el avance porque `specs/` no se edita).
 
 ## Autorización (fase actual)
 
-Solo el dueño de un recurso puede leerlo/mutarlo (álbumes, fotos). No hay
-colaboradores todavía (eso es una spec futura) — no implementar accesos
-compartidos por adelantado.
+Desde spec05-colaboradores.md hay dos niveles: **membresía** (owner o
+collaborator — lectura de álbum/fotos, aporte de fotos propias) y
+**ownership estricto** (gestión del álbum: rename/delete/invitar/quitar
+colaboradores; y ownership de `Photo`, que nunca cambia con el rol). Ver
+`src/albums/collaborators/album-access.service.ts` (`AlbumAccessService`):
+extiende `requireOwned` con `requireMembership` (404 uniforme sin owner ni
+collaborator) y `requireOwner` (delega en `requireOwned`, mismo mensaje).
+No es una función pura porque resolver el rol necesita dos lecturas de
+repositorio (álbum + membresía in-memory) — es un servicio inyectable
+compartido por `AlbumsService`, `PhotosService`, `InvitationsService` y
+`CollaboratorsService`, todos dentro de `AlbumsModule`. El README tiene el
+detalle completo de decisiones (fila de owner derivada vs. persistida,
+orden de checks al aceptar invitación, expiración perezosa, etc.) en la
+sección "Colaboradores (spec05-colaboradores)" — no lo dupliques aquí, solo
+el patrón reusable:
+
+- **Membresía N:M con datos extra**: cuando la relación N:M lleva algo más
+  que "existe/no existe" (aquí, `joinedAt`), el patrón `Map<id, Set<id>>`
+  (álbum↔foto) no alcanza — se extendió a `Map<id, Map<id, Entity>>`
+  (`in-memory-membership.repository.ts`). Sigue siendo el mismo espíritu
+  (evitar duplicados por construcción), solo con un `Map` interior en vez
+  de un `Set`.
+- **`ConfigModule` es `isGlobal: true`** desde `AuthModule` (se cambió ahí
+  al añadir `InvitationsService`, que necesita `ConfigService` en
+  `AlbumsModule` sin volver a registrar `ConfigModule`). Cualquier módulo
+  nuevo puede inyectar `ConfigService` sin importar nada extra.
+- Al escribir un servicio que combina "requiere rol" + "requiere ser dueño
+  de OTRA entidad" (p. ej. `PhotosService.associate`: membresía en el álbum
+  + ownership de la foto), resuelve primero la membresía (404 si no hay) y
+  luego aplica `requireOwned` sobre la segunda entidad — no intentes
+  colapsar ambos checks en uno, son conceptualmente distintos (rol vs.
+  propiedad) y la spec puede diferenciarlos en el futuro.
+
+## Abstracción de proveedor de almacenamiento (spec08)
+
+- `Photo.storageRef: { provider, fileId }` reemplazó `Photo.driveFileId:
+  string`. `PhotoStorage` (token `Symbol('PHOTO_STORAGE')`,
+  `src/albums/photos/storage/`) sigue el mismo patrón de interfaz+token que
+  `PhotoRepository`/`AlbumRepository` — antes de tocar este código, ver la
+  sección "Abstracción de almacenamiento (spec08)" del README (contrato de
+  API completo, tabla de operaciones soportadas/no soportadas).
+- **Exportar un `Service` completo desde un módulo, no solo sus
+  dependencias**: `AlbumsModule` necesitaba inyectar `AuthService` en
+  `GoogleDrivePhotoStorage` (para reusar `getDriveAccessToken` sin duplicar
+  el lookup del refresh token). `AuthModule` solo exportaba
+  `SessionAuthGuard` + `SessionTokenService` (su dependencia) — hubo que
+  añadir `AuthService` a `exports`. Mismo principio ya documentado arriba
+  ("exportar también las dependencias que el consumidor necesita"), pero
+  aquí lo que se exporta es un servicio completo, no solo la dependencia de
+  un guard — si un módulo futuro necesita otro servicio de `AuthModule`,
+  añadirlo a `exports` es el patrón, no crear una interfaz nueva para eso.
+- **Operaciones "declaradas pero no soportadas" en una interfaz de
+  proveedor**: cuando una interfaz fija intención para el futuro (M5, un
+  storage propio) pero el MVP no la implementa, no se omite el método ni se
+  hace un no-op silencioso — se implementa lanzando un `ApiException`
+  uniforme con un código propio (aquí `STORAGE_OPERATION_UNSUPPORTED`, 501)
+  vía una factory en `photo-storage.errors.ts`, mismo patrón que
+  `auth.errors.ts`. Así el contrato queda fijado en el tipo Y en el
+  comportamiento en runtime, sin sobre-ingeniería (no hace falta una clase
+  `NotImplementedPhotoStorage` ni feature flags).
+- **Test de pureza de dominio por grep, no por convención**:
+  `src/albums/domain-storage-neutrality.spec.ts` escanea `.ts` bajo
+  `src/albums` (excluyendo `photos/storage/`, `*.module.ts` y `*.spec.ts`) y
+  falla si aparece `Drive`/`driveFileId` literal. Si se añade un segundo
+  proveedor de almacenamiento en el futuro, este test es la señal temprana
+  de que algo fuera de `photos/storage/` se acopló al nombre del proveedor
+  concreto — no lo debilites para que pase, corrige el acoplamiento.

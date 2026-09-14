@@ -30,10 +30,7 @@ export class AuthController {
 
   @Post('refresh')
   refresh(@Body() body: unknown) {
-    const sessionRefreshToken = requireStringField(
-      body,
-      'sessionRefreshToken',
-    );
+    const sessionRefreshToken = requireStringField(body, 'sessionRefreshToken');
     const session = this.authService.refreshSession(sessionRefreshToken);
 
     return {
@@ -53,6 +50,9 @@ export class AuthController {
   @UseGuards(SessionAuthGuard)
   async getDriveToken(@CurrentUser() user: { id: string }) {
     const token = await this.authService.getDriveAccessToken(user.id);
-    return { driveAccessToken: token.accessToken, expiresIn: token.expiresInSeconds };
+    return {
+      driveAccessToken: token.accessToken,
+      expiresIn: token.expiresInSeconds,
+    };
   }
 }

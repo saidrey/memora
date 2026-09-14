@@ -43,9 +43,7 @@ describe('Memora backend (e2e)', () => {
     });
 
     it('includes a request id header even when the client sends none', async () => {
-      const response = await request(app.getHttpServer()).get(
-        '/api/v1/health',
-      );
+      const response = await request(app.getHttpServer()).get('/api/v1/health');
       expect(response.headers[REQUEST_ID_HEADER]).toEqual(expect.any(String));
       expect(response.headers[REQUEST_ID_HEADER].length).toBeGreaterThan(0);
     });
@@ -72,9 +70,7 @@ describe('Memora backend (e2e)', () => {
         message: expect.any(String),
         requestId: expect.any(String),
       });
-      expect(response.headers[REQUEST_ID_HEADER]).toBe(
-        response.body.requestId,
-      );
+      expect(response.headers[REQUEST_ID_HEADER]).toBe(response.body.requestId);
     });
   });
 });

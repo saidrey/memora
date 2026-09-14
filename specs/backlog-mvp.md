@@ -44,25 +44,26 @@ Checklist funcional del MVP, agrupado por módulos. Cada ítem está redactado c
 - ✅ (extra) Biblioteca personal `GET /library` (D11) y borrar foto de la biblioteca sin tocar Drive. *(backend spec04)*
 
 ## M4 — Álbumes compartidos y colaboradores
-- ⬜ C4.1 Owner invita colaborador mediante enlace de invitación (D12).
-- ⬜ C4.2 Invitado abre enlace → Google Login → acepta → pasa a Collaborator.
-- ⬜ C4.3 Invitaciones con expiración y revocables por el Owner (D13).
-- ⬜ C4.4 Collaborator ve todas las fotos del álbum y aporta las suyas (permisos D1).
-- ⬜ C4.5 Fotos del colaborador se guardan en SU propio Drive (multi-Drive).
-- ⬜ C4.6 Owner administra colaboradores (ver lista, quitar).
-- ⬜ C4.7 Owner quita del álbum una foto de un colaborador → solo la relación, no el archivo ajeno (D4).
-- ⬜ C4.8 Colaborador abandona el álbum: deja de aportar; sus fotos históricas permanecen mientras estén disponibles (D5).
+- 🟡 C4.1 Owner invita colaborador mediante enlace de invitación (D12). *(backend ✅ spec05; falta UI app)*
+- 🟡 C4.2 Invitado abre enlace → Google Login → acepta → pasa a Collaborator. *(backend ✅ acepta un solo uso; login+UI = app)*
+- 🟡 C4.3 Invitaciones con expiración y revocables por el Owner (D13). *(backend ✅ spec05; falta UI app)*
+- 🟡 C4.4 Collaborator ve todas las fotos del álbum y aporta las suyas (permisos D1). *(backend ✅; falta UI app)*
+- 🟡 C4.5 Fotos del colaborador se guardan en SU propio Drive (multi-Drive). *(backend coordina ✅; subida real de bytes = app)*
+- 🟡 C4.6 Owner administra colaboradores (ver lista, quitar). *(backend ✅; falta UI app)*
+- ✅ C4.7 Owner quita del álbum una foto de un colaborador → solo la relación, no el archivo ajeno (D4). *(backend spec05)*
+- 🟡 C4.8 Colaborador abandona el álbum: deja de aportar; sus fotos históricas permanecen mientras estén disponibles (D5). *(backend ✅ `DELETE .../collaborators/me`; falta UI app)*
 
-## M5 — Adoptar / "Guardar en mi biblioteca"
-- ⬜ G5.1 El Owner selecciona una foto de un colaborador y la "Guarda en mi biblioteca" → crea una **copia** en el Drive del Owner (D6).
-- ⬜ G5.2 La copia pertenece al Owner y sobrevive aunque el colaborador se vaya o borre su original.
-- ⬜ G5.3 El original del colaborador queda intacto.
+## M5 — Adoptar / "Guardar en mi biblioteca" ⏸️ DIFERIDO A POST-MVP (2026-09-14)
+> No viable de forma transparente con `drive.file` (ver `memora-backend/spec06-adoptar.md`). En el MVP las fotos de colaboradores se ven mientras estén disponibles en su Drive (D5+D9); no hay copia. Se retomará con una eventual decisión de scope/infra.
+- ⏸️ G5.1 El Owner "Guarda en mi biblioteca" una foto de un colaborador → copia en su Drive (D6). *(diferido)*
+- ⏸️ G5.2 La copia pertenece al Owner y sobrevive aunque el colaborador se vaya o borre su original. *(diferido)*
+- ⏸️ G5.3 El original del colaborador queda intacto. *(diferido)*
 
 ## M6 — Disponibilidad de archivos (Drive)
-- ⬜ D6.1 Al mostrar una foto, Memora verifica disponibilidad (perezosa, sin sync activa) (D9).
-- ⬜ D6.2 Archivo borrado/en papelera/sin permisos → se marca "no disponible" y no se muestra como disponible.
-- ⬜ D6.3 Renombrar/mover en Drive NO rompe la referencia (usa `fileId`).
-- ⬜ D6.4 Si el archivo vuelve a estar disponible, se puede revalidar/recuperar.
+- 🟡 D6.1 Al mostrar una foto, Memora verifica disponibilidad (perezosa, sin sync activa) (D9). *(backend ✅ spec07: persiste el reporte; verificación real contra Drive = app)*
+- 🟡 D6.2 Archivo borrado/en papelera/sin permisos → se marca "no disponible" y no se muestra como disponible. *(backend ✅ marca y expone; el cliente muestra el estado)*
+- ✅ D6.3 Renombrar/mover en Drive NO rompe la referencia (usa `fileId`). *(backend spec07: por construcción + test de no-regresión)*
+- ✅ D6.4 Si el archivo vuelve a estar disponible, se puede revalidar/recuperar. *(backend spec07)*
 
 ## M7 — Compartir y visor
 - ⬜ V7.1 Compartir un álbum genera un enlace estable de acceso al visor.

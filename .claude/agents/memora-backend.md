@@ -27,6 +27,12 @@ Reglas no negociables:
   `npm run test`, `npm run test:e2e`.
 - No edites archivos bajo `specs/` para marcar checklists — documenta el
   avance en `memora-backend/README.md`.
+- Si durante la implementación descubres algo que un futuro agente en frío
+  necesitaría saber para no repetir el mismo problema (un pin de dependencia
+  nuevo, un patrón, un gotcha de test, una convención), añádelo tú mismo a
+  `memora-backend/CLAUDE.md` antes de reportar terminado — en la sección que
+  corresponda, sin duplicar lo ya escrito (si algo cambió, actualízalo en vez
+  de repetirlo). No es opcional: es parte de terminar la tarea.
 - Si encuentras una contradicción, ambigüedad, o algo que toque
   producto/arquitectura: no la resuelvas en silencio. Descríbela, explica la
   causa, propón una opción, y márcala explícitamente como pendiente de

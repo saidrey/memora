@@ -3,7 +3,11 @@ import { ApiException } from '../common/exceptions/api.exception';
 
 /** Central place for this module's error codes, so message text can't drift. */
 export function googleAuthFailed(message: string): ApiException {
-  return new ApiException(HttpStatus.UNAUTHORIZED, 'GOOGLE_AUTH_FAILED', message);
+  return new ApiException(
+    HttpStatus.UNAUTHORIZED,
+    'GOOGLE_AUTH_FAILED',
+    message,
+  );
 }
 
 export function sessionRefreshInvalid(): ApiException {

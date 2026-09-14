@@ -9,7 +9,8 @@ import { SessionTokenService } from './session/session-token.service';
 import { ApiException } from '../common/exceptions/api.exception';
 
 const SENTINEL_CODE = 'sentinel-server-auth-code-should-never-be-logged';
-const SENTINEL_REFRESH_TOKEN = 'sentinel-google-refresh-token-should-never-be-logged';
+const SENTINEL_REFRESH_TOKEN =
+  'sentinel-google-refresh-token-should-never-be-logged';
 
 function buildFakeGoogleAuthClient(
   overrides: Partial<GoogleAuthClient> = {},
@@ -17,7 +18,11 @@ function buildFakeGoogleAuthClient(
   return {
     exchangeServerAuthCode: async () => ({
       refreshToken: SENTINEL_REFRESH_TOKEN,
-      identity: { googleId: 'google-1', email: 'user@example.com', name: 'User' },
+      identity: {
+        googleId: 'google-1',
+        email: 'user@example.com',
+        name: 'User',
+      },
     }),
     getDriveAccessToken: async () => ({
       accessToken: 'drive-access-token',
@@ -78,16 +83,24 @@ describe('AuthService', () => {
   });
 
   it('never logs the serverAuthCode or the Google refresh token', async () => {
-    const logSpy = jest.spyOn(console, 'log').mockImplementation(() => undefined);
+    const logSpy = jest
+      .spyOn(console, 'log')
+      .mockImplementation(() => undefined);
     const errorSpy = jest
       .spyOn(console, 'error')
       .mockImplementation(() => undefined);
-    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const warnSpy = jest
+      .spyOn(console, 'warn')
+      .mockImplementation(() => undefined);
 
     const { authService } = buildAuthService(buildFakeGoogleAuthClient());
     await authService.loginWithGoogle(SENTINEL_CODE);
 
-    const allLoggedText = [...logSpy.mock.calls, ...errorSpy.mock.calls, ...warnSpy.mock.calls]
+    const allLoggedText = [
+      ...logSpy.mock.calls,
+      ...errorSpy.mock.calls,
+      ...warnSpy.mock.calls,
+    ]
       .flat()
       .map((value) => JSON.stringify(value))
       .join('\n');

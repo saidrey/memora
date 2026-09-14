@@ -31,7 +31,11 @@ export class InMemoryAlbumRepository implements AlbumRepository {
   }
 
   async rename(id: string, name: string): Promise<Album> {
-    const updated: Album = { ...this.requireAlbum(id), name, updatedAt: new Date() };
+    const updated: Album = {
+      ...this.requireAlbum(id),
+      name,
+      updatedAt: new Date(),
+    };
     this.albumsById.set(id, updated);
     return updated;
   }

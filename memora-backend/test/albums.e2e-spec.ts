@@ -18,13 +18,21 @@ function buildFakeGoogleAuthClient(): GoogleAuthClient {
       if (serverAuthCode === CODE_USER_A) {
         return {
           refreshToken: 'fake-refresh-a',
-          identity: { googleId: 'google-a', email: 'a@example.com', name: 'User A' },
+          identity: {
+            googleId: 'google-a',
+            email: 'a@example.com',
+            name: 'User A',
+          },
         };
       }
       if (serverAuthCode === CODE_USER_B) {
         return {
           refreshToken: 'fake-refresh-b',
-          identity: { googleId: 'google-b', email: 'b@example.com', name: 'User B' },
+          identity: {
+            googleId: 'google-b',
+            email: 'b@example.com',
+            name: 'User B',
+          },
         };
       }
       throw new Error('invalid code');

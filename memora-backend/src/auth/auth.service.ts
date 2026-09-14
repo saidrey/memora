@@ -44,9 +44,8 @@ export class AuthService {
   async loginWithGoogle(
     serverAuthCode: string,
   ): Promise<{ session: SessionTokenPair; user: PublicUser }> {
-    const { refreshToken, identity } = await this.exchangeServerAuthCode(
-      serverAuthCode,
-    );
+    const { refreshToken, identity } =
+      await this.exchangeServerAuthCode(serverAuthCode);
 
     let user = await this.userRepository.findByGoogleId(identity.googleId);
     if (!user) {
@@ -117,9 +116,8 @@ export class AuthService {
   private verifySessionRefreshToken(sessionRefreshToken: string) {
     let payload;
     try {
-      payload = this.sessionTokenService.verifyRefreshToken(
-        sessionRefreshToken,
-      );
+      payload =
+        this.sessionTokenService.verifyRefreshToken(sessionRefreshToken);
     } catch {
       throw sessionRefreshInvalid();
     }

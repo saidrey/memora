@@ -21,7 +21,10 @@ repetir bugs ya solucionados.
    Agent tool, pasándole el brief. El agente trabaja únicamente dentro de su
    carpeta.
 4. **Reviso el diff y los resultados de build/test** del agente antes de
-   darlo por bueno.
+   darlo por bueno — incluyendo la actualización que haya hecho a su propio
+   `CLAUDE.md`/`AGENTS.md` (cada agente documenta ahí, como parte de su
+   tarea, cualquier gotcha/patrón/pin nuevo que descubra; reviso que no
+   duplique ni contradiga lo ya escrito).
 5. Reporto al usuario: qué se implementó, cómo verificarlo, y qué queda
    marcado para revisión de Kiro.
 

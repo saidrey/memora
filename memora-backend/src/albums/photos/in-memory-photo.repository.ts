@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
-import { Photo } from './photo.model';
+import { Photo, PhotoAvailability } from './photo.model';
 import { PhotoRepository } from './photo-repository.interface';
 
 @Injectable()
@@ -30,5 +30,26 @@ export class InMemoryPhotoRepository implements PhotoRepository {
 
   async delete(id: string): Promise<void> {
     this.photosById.delete(id);
+  }
+
+  async updateAvailability(
+    id: string,
+    availability: PhotoAvailability,
+  ): Promise<Photo> {
+    const updated: Photo = {
+      ...this.requirePhoto(id),
+      availability,
+      availabilityCheckedAt: new Date(),
+    };
+    this.photosById.set(id, updated);
+    return updated;
+  }
+
+  private requirePhoto(id: string): Photo {
+    const photo = this.photosById.get(id);
+    if (!photo) {
+      throw new Error(`Photo ${id} not found`);
+    }
+    return photo;
   }
 }

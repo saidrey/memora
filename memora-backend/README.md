@@ -297,6 +297,367 @@ mismo criterio que `requireStringField` en M2.
 - `test/photos.e2e-spec.ts` — e2e de los 5 endpoints (éxito + 400/401/404),
   con el patrón `beforeAll`/`afterAll` (ver nota de infraestructura arriba).
 
+## Colaboradores (spec05-colaboradores)
+
+Implementa `specs/memora-backend/spec05-colaboradores.md`: roles Owner/
+Collaborator por álbum (D1), invitación por enlace de un solo uso (D12/D13),
+lectura y aporte de fotos por colaboradores (multi-Drive dentro de un mismo
+álbum), y administración de colaboradores (D5). Todo dentro de
+`src/albums/` — colaboradores viven en el subdirectorio nuevo
+`src/albums/collaborators/`.
+
+### Endpoints
+
+Todos protegidos por `SessionAuthGuard` (401 sin sesión).
+
+| Método | Ruta | Quién | Qué hace |
+|---|---|---|---|
+| `POST` | `/api/v1/albums/:albumId/invitations` | owner | Crea invitación `pending`, expira a `INVITATION_TTL_DAYS` días (default 7). Responde `{ id, token, url, status, expiresAt, createdAt }` — `url` construida sobre `APP_INVITE_BASE_URL`. |
+| `GET` | `/api/v1/albums/:albumId/invitations` | owner | Lista invitaciones con su estado. El `token`/`url` solo se incluyen mientras la invitación sigue `pending`. |
+| `DELETE` | `/api/v1/albums/:albumId/invitations/:invitationId` | owner | Revoca una invitación `pending`. Idempotente si ya no estaba `pending` (accepted/revoked/expired). |
+| `POST` | `/api/v1/invitations/:token/accept` | autenticado | Canjea el token. 204 si queda como collaborator (o si ya era miembro — idempotente). 410 `INVITATION_NOT_USABLE` si el token es desconocido, o la invitación está `accepted`/`revoked`/`expired` y el caller **no** es ya miembro. |
+| `GET` | `/api/v1/albums` | autenticado | **Cambiado (P3, aditivo):** una sola lista, propios + donde colabora, con campo `role` (`'owner'|'collaborator'`) por álbum. |
+| `GET` | `/api/v1/albums/:id` | owner o collaborator | **Cambiado:** antes owner-only; ahora abierto a membresía. 404 uniforme sin membresía. |
+| `POST` | `/api/v1/photos` (con `albumId`) | owner o collaborator del álbum | **Cambiado:** un colaborador puede aportar; `Photo.ownerId` sigue siendo quien registra (su Drive). |
+| `POST` | `/api/v1/albums/:albumId/photos` | owner o collaborator del álbum, dueño de la foto | **Cambiado:** requiere membresía en el álbum (antes owner-only) + seguir siendo dueño de la foto (sin cambios). |
+| `DELETE` | `/api/v1/albums/:albumId/photos/:photoId` | owner (cualquier foto) / collaborator (solo las suyas) | **Cambiado:** antes solo el owner podía; ahora el owner quita cualquiera (D4) y el colaborador solo sus propias aportaciones — foto ajena → 404 uniforme. |
+| `DELETE` | `/api/v1/photos/:photoId` | dueño de la foto | Sin cambios de contrato. |
+| `GET` | `/api/v1/albums/:albumId/collaborators` | owner | Lista `{ userId, role, joinedAt }` de cada colaborador. |
+| `DELETE` | `/api/v1/albums/:albumId/collaborators/:userId` | owner | Quita a un colaborador (D5: sus fotos históricas quedan). El owner no puede quitarse a sí mismo → 400 `CANNOT_REMOVE_OWNER`. |
+| `DELETE` | `/api/v1/albums/:albumId/collaborators/me` | collaborator (P1) | El propio colaborador abandona; mismo efecto que ser quitado (D5). Requiere membresía → 404 uniforme si no eres miembro. El owner no puede "abandonar" su propio álbum por aquí → 400 `CANNOT_LEAVE_AS_OWNER`. |
+| `DELETE` | `/api/v1/albums/:id` | owner | **Cambiado (D16):** además del álbum y sus relaciones foto↔álbum, ahora también borra sus membresías y sus invitaciones. Nunca borra `Photo` ni Drive. |
+
+Álbum inexistente o sin membresía del solicitante → 404 uniforme, nunca 403
+(mismo criterio que M2, extendido a "requiere membresía" en vez de solo
+"requiere ownership"). Token de invitación inválido/expirado/revocado/ya
+usado → 410 `INVITATION_NOT_USABLE`. El owner no puede quitarse a sí mismo
+ni abandonar su propio álbum → 400 (`CANNOT_REMOVE_OWNER` /
+`CANNOT_LEAVE_AS_OWNER`).
+
+### Modelo y decisiones de implementación tomadas dentro de la spec (aprobada, sin nada pendiente de Kiro)
+
+- **`AlbumMembership` (`src/albums/collaborators/album-membership.model.ts`)**
+  — la fila de **owner nunca se persiste**: se deriva de `Album.ownerId` al
+  vuelo (`AlbumAccessService`). `MembershipRepository` solo guarda filas
+  `role: 'collaborator'`. La spec dejaba esto explícitamente abierto ("sin
+  cambiar contrato") — se eligió derivar porque no hay transferencia de
+  propiedad en el MVP, así que una fila de owner persistida nunca cambiaría
+  y sería puro estado duplicado que sincronizar sin beneficio.
+- **`AlbumAccessService`** (`src/albums/collaborators/album-access.service.ts`)
+  — extiende el patrón `requireOwned` a "requiere membresía": `getRole`,
+  `requireMembership` (404 uniforme si no hay owner ni collaborator) y
+  `requireOwner` (mismo 404 que `requireOwned`, para las rutas de gestión).
+  No es una función pura como `requireOwned` porque resolver el rol necesita
+  dos lecturas de repositorio (álbum + membresía) — es un servicio
+  inyectable, reutilizado por `AlbumsService`, `PhotosService`,
+  `InvitationsService` y `CollaboratorsService`, todos dentro de
+  `AlbumsModule`.
+- **`PhotosService`** — `register`/`associate` ahora exigen membresía en el
+  álbum (owner o collaborator) en vez de ownership; la propiedad de la
+  `Photo` en sí no cambia (sigue siendo `requireOwned` sobre la foto).
+  `disassociate` ahora resuelve el rol primero: el owner puede quitar
+  cualquier foto (D4), un collaborator solo las que él mismo aportó — si
+  intenta quitar una ajena, 404 uniforme (mismo mensaje que "foto no
+  encontrada", para no revelar que existe).
+- **`GET /albums` vs. `POST/PATCH /albums` y `GET /albums/:id`** — el campo
+  `role` (P3) solo se añadió al endpoint de **lista**, tal como pide la
+  spec explícitamente ("aditivo, no rompe M2"). Deliberadamente **no** se
+  añadió a la respuesta de creación/renombrado ni al detalle de álbum — no
+  estaba en el alcance de P3 y habría roto los `toEqual` exactos de
+  `test/albums.e2e-spec.ts` (spec03) sin necesidad.
+- **`AlbumsService.getForOwner`/`listForOwner` renombrados a `getForUser`/
+  `listForUser`** — reflejan que ya no son owner-only. Es un cambio interno
+  (no afecta contrato HTTP); se actualizaron todos los call sites y los
+  tests unitarios existentes.
+- **Orden de checks en `POST /invitations/:token/accept`** (la spec da dos
+  reglas — P5 410 para no-pending, P5 204 idempotente si ya eres miembro —
+  sin fijar el orden cuando ambas podrían aplicar): se decidió comprobar
+  **primero** si el caller ya es miembro (owner o collaborator) — si lo es,
+  204 sin mirar el estado de la invitación. Solo si NO es miembro se evalúa
+  si la invitación sigue `pending` y no expirada (si no, 410). Esto hace
+  que re-aceptar tu propio enlace ya usado sea idempotente incluso si el
+  token quedó `accepted`, y sigue cumpliendo P6 (un tercero no puede usar
+  ese mismo token, porque no es miembro y el token ya no está `pending`).
+- **Expiración de invitaciones (`'expired'`)** se detecta de forma
+  **perezosa**: el repositorio en memoria no tiene reloj propio, así que
+  `InvitationsService` compara `expiresAt` con `Date.now()` en cada lectura
+  (`list`/`accept`/`revoke`) y persiste la transición a `'expired'` la
+  primera vez que la detecta.
+- **Exposición del token en `GET .../invitations`**: solo se incluye
+  `token`/`url` mientras la invitación está `pending`. La spec solo exige
+  ocultarlo para las `accepted` ("sin exponer el token en claro de
+  invitaciones ya aceptadas"); se optó por ocultarlo también en
+  `revoked`/`expired` (más conservador — ya no sirven, no hay razón para
+  seguir mostrando un secreto muerto) — no contradice la spec, la extiende
+  en la dirección más segura.
+- **Revocar una invitación no-`pending`** (spec no define el error): se
+  hizo idempotente — revocar una ya `accepted`/`revoked`/`expired` no lanza
+  error, simplemente no hace nada (ya no es usable de todas formas).
+- **`DELETE .../collaborators/me` llamado por el propio owner** (caso no
+  cubierto explícitamente por la spec, que describe este endpoint para
+  colaboradores): se rechaza con 400 `CANNOT_LEAVE_AS_OWNER` en vez de ser
+  un no-op silencioso — evita que un owner "abandone" su álbum sin que pase
+  nada, lo cual sería una confusión de UX en el cliente.
+- **`AlbumRole` como `'owner' | 'collaborator'`** vive en
+  `album-membership.model.ts` y se reexporta desde ahí — un solo lugar,
+  sin duplicar el union type entre repositorio, servicio y controladores.
+- **`ConfigModule` se hizo `isGlobal: true`** en `AuthModule` (antes
+  `ConfigModule.forRoot()` sin más opciones) para que `InvitationsService`
+  (en `AlbumsModule`) pueda inyectar `ConfigService` sin que `AlbumsModule`
+  tenga que volver a registrar/importar `ConfigModule` — mismo patrón ya
+  usado por `GoogleOAuthClient`/`SessionTokenService`, ahora disponible sin
+  fricción a cualquier módulo futuro.
+
+### Tests
+
+- `src/albums/collaborators/album-access.service.spec.ts` — cubierto
+  indirectamente vía los specs de `AlbumsService`/`PhotosService`/
+  `InvitationsService`/`CollaboratorsService` (todos lo inyectan); no tiene
+  spec propio porque no añade lógica de negocio más allá de componer
+  `AlbumRepository` + `MembershipRepository`.
+- `src/albums/collaborators/invitations.service.spec.ts` — unit: crear con
+  URL/token/TTL (default y configurado), owner-only al crear/listar/
+  revocar, aceptar (feliz, idempotente para ya-miembro incluyendo el propio
+  owner, 410 para revocada/expirada/desconocida, un tercero no puede reusar
+  una ya aceptada), expiración detectada perezosamente y persistida, token
+  oculto tras aceptar pero visible mientras `pending`, revocar es
+  idempotente.
+- `src/albums/collaborators/collaborators.service.spec.ts` — unit: listar,
+  quitar colaborador (owner-only, no puede quitarse a sí mismo), abandonar
+  (requiere membresía, el owner no puede abandonar por aquí).
+- `src/albums/albums.service.spec.ts` — ampliado: listado combinado con
+  `role`, lectura por collaborator, 404 uniforme sin membresía, borrar
+  álbum limpia membresías + invitaciones.
+- `src/albums/photos/photos.service.spec.ts` — ampliado: colaborador
+  registra/asocia fotos propias, no puede asociar ajenas, un no-miembro no
+  puede aportar, el owner quita cualquier foto (incluida la de un
+  colaborador, D4), el colaborador solo quita las suyas.
+- `test/collaborators.e2e-spec.ts` — e2e con **3 usuarios reales** (owner,
+  collaborator, outsider) vía un fake `GoogleAuthClient` con 3 códigos,
+  patrón `beforeAll`/`afterAll`, sin `Promise.all` en peticiones
+  concurrentes (mismo criterio que `photos.e2e-spec.ts`, ver nota de
+  infraestructura arriba). Cubre los criterios de validación de la spec:
+  ciclo completo de invitación (crear/listar/revocar/aceptar), 410 por
+  token inválido/revocado/reusado, lectura y aporte por collaborator,
+  quitar foto ajena vs. propia, administrar y abandonar colaboradores,
+  limpieza de membresías/invitaciones al borrar el álbum.
+
+### Env vars nuevas
+
+Opcionales, con default en código — no hace falta configurarlas en dev:
+
+- `APP_INVITE_BASE_URL` (default `https://memora.app/invite/{token}`) — debe
+  contener el placeholder `{token}`; nunca hardcodear el dominio.
+- `INVITATION_TTL_DAYS` (default `7`).
+
+## Disponibilidad (spec07-disponibilidad)
+
+Implementa `specs/memora-backend/spec07-disponibilidad.md`: disponibilidad
+**perezosa** (D9) de las fotos — no hay sync activa (ni polling ni
+webhooks). El campo `Photo.availability` ya existía desde spec04; esta spec
+define cómo se actualiza, quién lo verifica y cómo se expone.
+
+### Hallazgo que fija el diseño (P1)
+
+El backend **no maneja bytes** y no tiene, ni añade aquí, ningún cliente que
+lea archivos de Drive — con scope `drive.file`, solo el **propietario** de
+un archivo puede verificar su existencia (su token no ve archivos ajenos),
+así que el owner de un álbum no podría verificar la disponibilidad de una
+foto aportada por un colaborador aunque quisiera. Por tanto: **el cliente
+verifica contra Drive** (con su `drive-token` de spec02, foto por foto,
+usando `driveFileId`) y **reporta el resultado**; el backend solo
+**persiste** ese reporte. No hay ninguna llamada saliente a la Drive API en
+este backend — verificable por grep (`googleapis`/`drive.files` no aparece
+fuera de `google-oauth.client.ts`, que solo emite el token efímero de
+spec02, nunca lee archivos).
+
+### Endpoints — todos protegidos por `SessionAuthGuard`, owner-only sobre la foto
+
+| Método | Ruta | Qué hace |
+|---|---|---|
+| `PATCH` | `/api/v1/photos/:photoId/availability` | Reporte individual (`{ availability: 'available' \| 'unavailable' }`). Devuelve la `Photo` actualizada. |
+| `POST` | `/api/v1/photos/availability` | Reporte batch (`{ reports: [{ photoId, availability }] }`) tras revisar un álbum completo. `204 No Content`. |
+
+- Foto ajena o inexistente en el endpoint individual → **404 uniforme**
+  (mismo criterio que el resto del backend, nunca 403).
+- En el batch, cada entrada se evalúa contra el propietario que llama: una
+  entrada de foto ajena o inexistente **se ignora silenciosamente** — no
+  lanza error ni rompe el resto del batch (así no se revela si un
+  `photoId` ajeno existe, y una sola entrada mala no descarta las demás).
+- Reportar `available` sobre una foto `unavailable` la **recupera** (D9) —
+  no hay restricción de transición; cualquier valor sobre cualquier estado
+  anterior es válido.
+- Body validado a mano (`src/albums/photos/parse-availability-input.ts`),
+  mismo patrón que `parse-register-photo-input.ts`: `400 INVALID_REQUEST`
+  si `availability` no es `'available'`/`'unavailable'`, o si `reports` no
+  es un array de entradas con esa forma.
+
+### Modelo — `Photo.availabilityCheckedAt?: Date` (P4)
+
+Se añadió junto a `availability` (`photo.model.ts`). Se estampa con
+`new Date()` en cada reporte aplicado (`PhotoRepository.updateAvailability`,
+implementado en `in-memory-photo.repository.ts` con el mismo patrón que
+`rename()` de `in-memory-album.repository.ts`: un `requirePhoto()` privado
+que lanza si el id no existe — nunca debería dispararse en la práctica
+porque los callers de `PhotosService` ya comprobaron ownership/existencia
+antes de llamar). Ausente hasta el primer reporte — no se fija al registrar
+la foto.
+
+### Exposición — el backend marca, no filtra (P3)
+
+`GET /api/v1/albums/:id` (vía `AlbumsService.getForUser`) y
+`GET /api/v1/library` (vía `PhotosService.listLibrary`) ya devolvían
+objetos `Photo` completos sin mapear a DTO — añadir el campo al modelo
+bastó para exponerlo ahí sin tocar esos servicios/controllers. Ninguno de
+los dos filtra fotos `unavailable`; el cliente decide cómo mostrarlas.
+Verificado con un test e2e explícito (no se dio por hecho).
+
+### No-regresión: renombrar/mover en Drive no afecta disponibilidad
+
+El backend nunca modela nombre/ruta (D8: sin GPS/EXIF, y tampoco hay campo
+de nombre/ruta en `Photo`) y todos los métodos de reporte localizan la foto
+por `id`/`driveFileId`, nunca por nombre — así que esto se cumple por
+construcción. Cubierto por un test explícito en
+`src/albums/photos/photos.service.spec.ts` que deja constancia del
+contrato (el modelo no tiene campo de nombre/ruta que cambiar, y re-reportar
+`available` tras un rename/move hipotético dejaría el estado exactamente
+igual).
+
+### Tests
+
+- `src/albums/photos/photos.service.spec.ts` — ampliado: reportar
+  `unavailable` con `availabilityCheckedAt` estampado, recuperar
+  (`unavailable` → `available`, D9), 404 uniforme al reportar sobre foto
+  ajena/inexistente, batch con mezcla de fotos propias y ajenas (las
+  propias se aplican, la ajena no rompe nada), reflejo en la lectura que
+  compone `getForUser`/en `listLibrary` sin filtrar, y el test de
+  no-regresión de renombrar/mover.
+- `test/photos.e2e-spec.ts` — ampliado: login real de dos usuarios (ya
+  existente en el archivo), reporte individual (éxito, recuperación, 400
+  valor inválido, 401 sin sesión, 404 ajena/inexistente), batch (éxito,
+  entrada ajena ignorada sin romper el resto, 400 shape inválido, 401), y
+  un test dedicado a que `GET /albums/:id` y `GET /library` incluyan
+  `availability`/`availabilityCheckedAt` sin filtrar fotos `unavailable`.
+
+## Abstracción de almacenamiento (spec08)
+
+Implementa `specs/memora-backend/spec08-abstraccion-almacenamiento.md`:
+desacopla el dominio del proveedor concreto de almacenamiento (hoy Google
+Drive, el único del MVP) detrás de una referencia física neutral y una
+interfaz de coordinación. **No** es una migración — Google Drive sigue
+siendo el único proveedor; solo queda detrás de una interfaz reemplazable.
+El backend sigue sin manejar bytes.
+
+### Referencia física neutral — `Photo.storageRef`
+
+`src/albums/photos/photo.model.ts` reemplaza el antiguo `driveFileId: string`
+por:
+
+```ts
+type StorageProvider = 'google-drive'; // único valor en el MVP
+interface StorageRef { provider: StorageProvider; fileId: string }
+```
+
+`Photo.storageRef: StorageRef` sustituye a `Photo.driveFileId`. `fileId`
+lleva exactamente el mismo valor que antes (referencia estable, nunca
+nombre/ruta — spec04); `provider` es nuevo y deja lugar a un futuro valor
+(p. ej. `'b2'`) sin ensanchar el tipo a `string`.
+
+### Contrato de API (cambio aditivo, sin clientes en producción aún)
+
+- **Entrada** `POST /api/v1/photos`: el cliente envía
+  `storageRef: { fileId, provider? }`. `provider` es opcional — si se omite,
+  `PhotosService.register` aplica el default `'google-drive'` (único valor
+  del MVP); si se envía, debe ser exactamente `'google-drive'` o el parseo
+  (`parse-register-photo-input.ts`) responde 400 `INVALID_REQUEST`. Se eligió
+  esta forma (en vez de "fileId suelto + provider implícito") porque ya deja
+  el body con la forma final multi-provider, sin necesitar otro cambio de
+  contrato cuando se añada un segundo proveedor.
+- **Salida** `GET /api/v1/albums/:id` y `GET /api/v1/library`: cada `Photo`
+  expone `storageRef: { provider, fileId }` en vez de `driveFileId`. Ambos
+  endpoints devuelven objetos `Photo` completos sin DTO intermedio (mismo
+  patrón que expuso `availability`/`availabilityCheckedAt` en spec07), así
+  que el cambio de modelo bastó — verificado con tests e2e explícitos en
+  ambos endpoints, no asumido.
+
+### Interfaz `PhotoStorage` — `src/albums/photos/storage/`
+
+Mismo patrón de DI que `PhotoRepository`/`AlbumRepository`: interfaz +
+token `Symbol('PHOTO_STORAGE')` + una implementación registrada en
+`AlbumsModule`.
+
+| Operación | Estado en el MVP |
+|---|---|
+| `getUploadAuthorization(userId)` | Implementada — envuelve `AuthService.getDriveAccessToken` (el broker `drive-token` de spec02), sin duplicar la lógica de refresh-token. |
+| `getReadReference(photo)` | Implementada — devuelve `{ provider, fileId }` neutral; no llama a Drive, el cliente/visor resuelve la lectura con su propio token. |
+| `describe(photo)` / `exists(photo)` | Declaradas, NO soportadas server-side en el MVP — la verificación real la hace el cliente y la reporta (spec07-disponibilidad). Lanzan `STORAGE_OPERATION_UNSUPPORTED`. |
+| `download`/`stream` | Declaradas, NO implementadas — el backend no maneja bytes (Opción A). `STORAGE_OPERATION_UNSUPPORTED`. |
+| `copy` | Declarada, NO implementada — es M5 (`spec06-adoptar.md`), diferido. `STORAGE_OPERATION_UNSUPPORTED`. |
+| `delete` | Declarada, NO implementada — Memora nunca borra del Drive del usuario por principio (`producto-mvp.md`, "no custodio"). `STORAGE_OPERATION_UNSUPPORTED`. |
+
+Todas las operaciones no soportadas fallan con el contrato de error uniforme
+del backend (`{ code: 'STORAGE_OPERATION_UNSUPPORTED', message, requestId }`,
+HTTP 501) vía `photo-storage.errors.ts` — nunca un error crudo. Fábrica y
+patrón calcados de `auth.errors.ts`/las funciones de error de
+`collaborators/`.
+
+### `GoogleDrivePhotoStorage` — única implementación viva
+
+`src/albums/photos/storage/google-drive-photo-storage.ts` inyecta
+`AuthService` (no `GoogleAuthClient` directamente) para reusar
+`getDriveAccessToken` sin duplicar el lookup del refresh token guardado ni
+añadir ninguna llamada real a la API de Drive — el backend sigue sin
+consultarla. `AuthModule` tuvo que exportar `AuthService` (antes solo
+exportaba `SessionAuthGuard` y su dependencia `SessionTokenService`) para
+que `AlbumsModule` (que ya importa `AuthModule` para el guard) pueda
+inyectarlo aquí — mismo patrón ya documentado: "exportar también las
+dependencias que el consumidor necesita".
+
+`GoogleDrivePhotoStorage` está registrada en `AlbumsModule` con el token
+`PHOTO_STORAGE`, pero ningún servicio la inyecta todavía — es la
+abstracción en paralelo que pide la spec para uso interno/futuro (M7,
+futuros servicios), no un reemplazo del endpoint HTTP `POST
+/auth/drive-token`, que sigue existiendo igual y sin tocar.
+
+### Pureza del dominio — verificada, no asumida
+
+`src/albums/domain-storage-neutrality.spec.ts` escanea todo `.ts` bajo
+`src/albums` (excluyendo `photos/storage/`, los `*.module.ts` de wiring de
+DI, y los propios `*.spec.ts`) y falla si aparece literalmente `Drive` o
+`driveFileId` — así que álbumes, colaboradores, disponibilidad y biblioteca
+no pueden volver a acoplarse al proveedor concreto sin que un test lo marque
+en rojo. `Drive` solo puede aparecer en `photos/storage/` (la implementación
+concreta) y en `auth/` (el broker real, spec02) — nunca en el resto del
+dominio.
+
+### Fuera de alcance (explícito, decisión del PO)
+
+Migrar fotos existentes; añadir Backblaze B2 (documentado como dirección
+futura seria, no implementado); cambiar scopes OAuth; implementar M5
+(copia); implementar borrado real en Drive; hacer que el backend maneje
+bytes o consulte la Drive API. Ver la spec para el detalle completo de la
+dirección futura (B2 como candidato a storage principal, Drive pasando a
+respaldo).
+
+### Tests
+
+- `src/albums/photos/storage/google-drive-photo-storage.spec.ts` — unit:
+  `getUploadAuthorization` delega en `AuthService` y propaga sus errores sin
+  envolver nada; `getReadReference` no llama a Drive; cada operación no
+  soportada (`describe`/`exists`/`download`/`stream`/`copy`/`delete`) lanza
+  `STORAGE_OPERATION_UNSUPPORTED` con status 501.
+- `src/albums/photos/photos.service.spec.ts` — ampliado: el registro
+  defaultea `storageRef.provider` a `'google-drive'` cuando el caller no lo
+  envía.
+- `src/albums/domain-storage-neutrality.spec.ts` — el grep automatizado
+  descrito arriba.
+- `test/photos.e2e-spec.ts` — todos los tests migrados de `driveFileId` a
+  `storageRef`; test explícito de que `POST /photos` asigna
+  `provider: 'google-drive'`, y de que `GET /albums/:id` expone `storageRef`
+  en cada foto (además del ya existente para `GET /library`).
+- `test/collaborators.e2e-spec.ts` — migrado a `storageRef` sin cambios de
+  comportamiento.
+
 ## Desarrollo
 
 ```bash

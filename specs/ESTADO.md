@@ -36,14 +36,17 @@ Completado y validado PASS:
 - Web: fundación (en pausa de desarrollo, sigue siendo parte del MVP).
 - **M2** Álbumes backend (`spec03`) — crear/listar/abrir/renombrar/eliminar, N:M foto↔álbum.
 - **M3 backend** Fotos (`spec04`) — registro por referencia, biblioteca, asociar/quitar N:M, borrar sin tocar Drive.
+- **M4 backend** Colaboradores (`spec05`) — invitación por enlace un solo uso (D12/D13), aceptar, roles Owner/Collaborator (D1), aporte multi-Drive, administrar/quitar/abandonar (D5), D16. PASS 2026-09-14 (70 unit + 67 e2e).
+- **M6 backend** Disponibilidad (`spec07`) — verificación perezosa (D9): cliente verifica → backend persiste; reporte individual + batch owner-only, recuperación, `availabilityCheckedAt`, expuesto sin filtrar en álbum/biblioteca. PASS 2026-09-14 (78 unit + 77 e2e).
+- **Abstracción de almacenamiento** (`spec08`) — `PhotoStorage` (interfaz + token) con `GoogleDrivePhotoStorage`; `Photo.driveFileId` → `storageRef {provider, fileId}`; ops no soportadas → 501 `STORAGE_OPERATION_UNSUPPORTED`; test de neutralidad de dominio. No migra nada. PASS 2026-09-14 (89 unit + 77 e2e).
+
+**Diferido (fuera del MVP hasta nueva decisión):**
+- **M5 — Adoptar** ("Guardar en mi biblioteca", D6): ⏸️ diferido a post-MVP (2026-09-14). Confirmado en `spec06-adoptar.md` que la copia cross-Drive no es viable de forma transparente con `drive.file` sin romper decisiones técnicas. En el MVP las fotos de colaboradores se ven mientras estén disponibles en su Drive (D5+D9); no hay copia.
 
 Pendiente (orden de backend acordado):
-1. **M4 — Colaboradores** (siguiente): invitación por enlace (D12), aceptar, permisos Owner/Collaborator (D1), colaborador aporta fotos a su propio Drive, administrar/quitar colaboradores, abandonar álbum (D5, sus fotos permanecen).
-2. **M5 — Adoptar** ("Guardar en mi biblioteca", D6): validar viabilidad de copia cross-Drive con `drive.file` en su spec (riesgo técnico; puede requerir que el backend intermedie una copia solicitada explícitamente).
-3. **M6 — Disponibilidad** (verificación perezosa, D9; el campo `availability` ya existe en `Photo`).
-4. **M7 — Compartir/visor** (enlace estable, acceso sin login D2) + resolución.
-5. **M8 — NFC/QR** (asociar a álbum ya creado D14, URL estable, resolución).
-6. **A1.5 — Refresh de sesión** (deuda: backend+app).
+1. **M7 — Compartir/visor** (siguiente): enlace estable, acceso sin login D2 + resolución.
+2. **M8 — NFC/QR** (asociar a álbum ya creado D14, URL estable, resolución).
+3. **A1.5 — Refresh de sesión** (deuda: backend+app).
 Después: app (M3 app: seleccionar/optimizar/subir; UI de álbumes; etc.) y web.
 
 ## Convenciones de validación (para optimizar tokens)

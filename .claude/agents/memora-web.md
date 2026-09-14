@@ -24,6 +24,11 @@ Reglas no negociables:
   patrón elegido en `AGENTS.md` para que las siguientes specs lo reutilicen.
 - No edites archivos bajo `specs/` para marcar checklists — documenta el
   avance en `memora-web/README.md`.
+- Si durante la implementación descubres algo que un futuro agente en frío
+  necesitaría saber para no repetir el mismo problema (un patrón, un gotcha,
+  una convención), añádelo tú mismo al final de `memora-web/AGENTS.md` (nunca
+  dentro del bloque autogenerado) antes de reportar terminado — sin duplicar
+  lo ya escrito. No es opcional: es parte de terminar la tarea.
 - Si encuentras una contradicción, ambigüedad, o algo que toque
   producto/arquitectura (incluida cualquier decisión de identidad visual no
   especificada): no la resuelvas en silencio. Descríbela, explica la causa,

@@ -11,9 +11,10 @@
 ## 0. Cómo usar este mapa (protocolo de arranque)
 
 1. Lee este archivo completo (es corto a propósito).
-2. Identifica el módulo/spec en el que vas a trabajar (sección 4 y 5).
-3. Abre **solo** las fuentes que ese trabajo requiera (los punteros de las secciones 2, 3 y 6). No releas todo.
-4. Si vas a tocar código, usa el **Mapa de código** (sección 6) para saber qué patrón replicar antes de leer archivos.
+2. Para saber **qué toca ahora**, lee `specs/ROADMAP.md` (la cola de trabajo). "Siguiente spec" = primer ítem PENDIENTE de la fase activa (backend → app → web).
+3. Identifica el módulo/spec en el que vas a trabajar (sección 4 y 5).
+4. Abre **solo** las fuentes que ese trabajo requiera (los punteros de las secciones 2, 3 y 6). No releas todo.
+5. Si vas a tocar código, usa el **Mapa de código** (sección 6) para saber qué patrón replicar antes de leer archivos.
 
 ---
 
@@ -50,7 +51,7 @@ Cada línea es un recordatorio de una línea. **El texto vinculante está en `pr
 | D3 | Usuario borra su foto → solo quita relación foto↔álbum; archivo queda en su Drive. |
 | D4 | Owner quita foto de un colaborador → solo relación; no toca archivo ni propiedad. |
 | D5 | Colaborador abandona → deja de aportar; sus fotos permanecen mientras estén disponibles. |
-| D6 | Adoptar / "Guardar en mi biblioteca" (M5): solo el owner copia foto de colaborador a su Drive. |
+| D6 | Adoptar / "Guardar en mi biblioteca" (M5): ⏸️ **DIFERIDO a post-MVP** (no viable con `drive.file`). En el MVP fotos de colaboradores visibles mientras estén disponibles en su Drive. |
 | D7 | App (captura + gestión completa) y Web (visor + plataforma auth); sin paridad 100%. |
 | D8 | Metadatos mínimos de foto; **NO** geolocalización GPS/EXIF. |
 | D9 | Cambios en Drive: verificación **perezosa**, sin sync activa; `fileId` estable (renombrar/mover no rompe). |
@@ -68,9 +69,9 @@ Cada línea es un recordatorio de una línea. **El texto vinculante está en `pr
 
 ## 4. Estado de implementación (resumen; la verdad está en ESTADO.md + specs)
 
-**PASS (validado):** Fundación monorepo + contrato API · Auth Google backend (login real en Android) · App fundación + login · Web fundación (en pausa de prioridad) · **M2** álbumes (spec03) · **M3 backend** fotos (spec04).
+**PASS (validado):** Fundación monorepo + contrato API · Auth Google backend (login real en Android) · App fundación + login · Web fundación (en pausa de prioridad) · **M2** álbumes (spec03) · **M3 backend** fotos (spec04) · **M4 backend** colaboradores (spec05) · **M6 backend** disponibilidad (spec07) · **Abstracción `PhotoStorage`** (spec08). Últimos tres PASS 2026-09-14.
 
-**Orden pendiente de backend:** **M4 Colaboradores** (en curso, spec05) → M5 Adoptar → M6 Disponibilidad → M7 Visor → M8 NFC/QR → A1.5 refresh de sesión. Luego app y web.
+**Orden pendiente de backend:** **M7 Visor** (siguiente) → M8 NFC/QR → A1.5 refresh de sesión. Luego app y web. **M5 Adoptar: ⏸️ diferido a post-MVP** (copia cross-Drive no viable con `drive.file`; las fotos de colaboradores se ven mientras estén disponibles en su Drive).
 
 > Estado detallado y deuda técnica: `ESTADO.md`. Estado por ítem verificable: `backlog-mvp.md`.
 
@@ -88,7 +89,10 @@ Numeración **independiente por carpeta**. Estados los asigna Kiro.
 - `spec02-autenticacion-google.md` — PASS (login real en dispositivo).
 - `spec03-biblioteca-albumes.md` — PASS (M2).
 - `spec04-fotografias.md` — PASS (M3 backend).
-- `spec05-colaboradores.md` — **M4, en curso** (ver estado en su cabecera).
+- `spec05-colaboradores.md` — PASS (M4 backend).
+- `spec06-adoptar.md` — ⏸️ DIFERIDA a post-MVP (M5; análisis técnico conservado).
+- `spec07-disponibilidad.md` — PASS (M6 backend).
+- `spec08-abstraccion-almacenamiento.md` — PASS (abstracción `PhotoStorage`; `Photo.driveFileId` → `Photo.storageRef {provider, fileId}`).
 
 **`specs/memora-app/`**
 - `spec01-fundacion-app.md`, `spec02-login-google.md`.
@@ -126,7 +130,9 @@ Raíz del backend: `memora-backend/`. NestJS 10 + TypeScript, Express. **Todos l
 
 **Entidades clave:**
 - `Album` (`src/albums/album.model.ts`): `{ id, ownerId, name, createdAt, updatedAt }`. **Sin colaboradores aún** (los añade M4).
-- `Photo` (`src/albums/photos/photo.model.ts`): `{ id, ownerId, driveFileId, createdAt, capturedAt?, width?, height?, mimeType?, sizeBytes?, availability }`. `driveFileId` = referencia estable; `availability` default `'available'`.
+- `Photo` (`src/albums/photos/photo.model.ts`): `{ id, ownerId, storageRef, createdAt, capturedAt?, width?, height?, mimeType?, sizeBytes?, availability, availabilityCheckedAt? }`. `storageRef = { provider: 'google-drive', fileId }` (spec08, referencia neutral; el dominio NO usa `driveFileId` ni menciona "Drive"). `availability` default `'available'`.
+
+**Abstracción de almacenamiento (spec08):** interfaz `PhotoStorage` (token `PHOTO_STORAGE`) en `src/albums/photos/storage/`, con `GoogleDrivePhotoStorage` (única impl, envuelve `AuthService.getDriveAccessToken`). Ops del MVP: `getUploadAuthorization`, `getReadReference`. Ops declaradas no soportadas (`describe/exists/download/stream/copy/delete`) → 501 `STORAGE_OPERATION_UNSUPPORTED`. Regla normativa: el dominio no referencia "Drive" ni `driveFileId` (verificado por `domain-storage-neutrality.spec.ts`). Para operar sobre el archivo, usar `PhotoStorage`; para referenciarlo, `Photo.storageRef`.
 
 **Broker drive-token:** `POST /api/v1/auth/drive-token` (`AuthController.getDriveToken`, guard + `@CurrentUser`) → `{ driveAccessToken, expiresIn }`. `AuthService.getDriveAccessToken(userId)` usa el refresh token guardado; sin él → 401 `DRIVE_REAUTHORIZATION_REQUIRED`. Scope `drive.file`. **El backend nunca ve los bytes.** En M4 cada colaborador usa su propio drive-token contra su propio Drive.
 

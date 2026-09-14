@@ -46,6 +46,11 @@ Orden fijo:
 3. **Grep dirigido a criterios críticos:** confirma con búsquedas específicas (no leyendo todo) que se cumplen los invariantes de la spec. Ejemplos según módulo: que no hay cliente de Drive manejando bytes en el service; que los borrados solo quitan relación; que se usa `requireOwned`/patrón de membresía y devuelve 404; que los `code` de error son uniformes.
 4. **Lectura profunda de código SOLO si:** un test falla, o la spec es sensible (auth, borrados, adopción, colaboradores). En esos casos puedes usar el sub-agente `context-gatherer` para acotar qué leer.
 
+## Reparto por capa
+
+- **Backend:** validas completo (build + unit + e2e + grep dirigido).
+- **App (Flutter) / Web:** valida lo verificable de forma estática (cumplimiento de la spec en el código, análisis, tests automatizados si el toolchain está disponible). **Las pruebas de usuario en app y web las hace el PO** en su entorno; no las simules ni las des por hechas. Reporta claramente qué verificaste y qué queda para la prueba manual del PO.
+
 ## Qué NO haces
 
 - No modificas código de producción (solo lectura de código; escritura permitida únicamente en `specs/` para anotar el veredicto).
@@ -61,7 +66,7 @@ Emite uno de: **PASS / PASS WITH NOTES / CHANGES REQUIRED**, con:
 - **Criterios de la spec:** lista marcando cada criterio como cumplido / no cumplido / no verificable, con la evidencia.
 - **Notas / cambios requeridos:** si aplica, concretos y accionables (qué falta y dónde), sin arreglarlos tú.
 
-Puedes registrar el veredicto en la sección "Notas de validación (Kiro)" de la propia spec y actualizar su cabecera de **Estado de validación**. Si el PO lo pide, actualiza también el estado en `ESTADO.md`/`backlog-mvp.md`.
+Puedes registrar el veredicto en la sección "Notas de validación (Kiro)" de la propia spec y actualizar su cabecera de **Estado de validación**. Al dar **PASS**, marca ✅ la fila del módulo en `specs/ROADMAP.md` y actualiza el estado en `specs/ESTADO.md` y `specs/backlog-mvp.md`, y el índice de `specs/CONTEXTO-KIRO.md`. Así "la siguiente spec" siempre queda bien apuntada para la próxima sesión.
 
 ## Estilo
 

@@ -29,6 +29,12 @@ Reglas no negociables:
   asumir que quedó probado.
 - No edites archivos bajo `specs/` para marcar checklists — documenta el
   avance en `memora-app/README.md`.
+- Si durante la implementación descubres algo que un futuro agente en frío
+  necesitaría saber para no repetir el mismo problema (un pin de dependencia,
+  un patrón, un gotcha, una convención), añádelo tú mismo a
+  `memora-app/CLAUDE.md` antes de reportar terminado — en la sección que
+  corresponda, sin duplicar lo ya escrito (si algo cambió, actualízalo en vez
+  de repetirlo). No es opcional: es parte de terminar la tarea.
 - Si encuentras una contradicción, ambigüedad, o algo que toque
   producto/arquitectura: no la resuelvas en silencio. Descríbela, explica la
   causa, propón una opción, y márcala explícitamente como pendiente de

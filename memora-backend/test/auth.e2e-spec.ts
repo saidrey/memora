@@ -178,11 +178,15 @@ describe('Auth (e2e)', () => {
   });
 
   it('never logs the serverAuthCode or any token across the whole flow', async () => {
-    const logSpy = jest.spyOn(console, 'log').mockImplementation(() => undefined);
+    const logSpy = jest
+      .spyOn(console, 'log')
+      .mockImplementation(() => undefined);
     const errorSpy = jest
       .spyOn(console, 'error')
       .mockImplementation(() => undefined);
-    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const warnSpy = jest
+      .spyOn(console, 'warn')
+      .mockImplementation(() => undefined);
 
     const login = await request(app.getHttpServer())
       .post('/api/v1/auth/google')
@@ -191,7 +195,11 @@ describe('Auth (e2e)', () => {
       .post('/api/v1/auth/drive-token')
       .set('Authorization', `Bearer ${login.body.sessionAccessToken}`);
 
-    const allLoggedText = [...logSpy.mock.calls, ...errorSpy.mock.calls, ...warnSpy.mock.calls]
+    const allLoggedText = [
+      ...logSpy.mock.calls,
+      ...errorSpy.mock.calls,
+      ...warnSpy.mock.calls,
+    ]
       .flat()
       .map((value) => JSON.stringify(value))
       .join('\n');

@@ -2,12 +2,33 @@ import { NotFoundException } from '@nestjs/common';
 import { AlbumsService } from './albums.service';
 import { InMemoryAlbumRepository } from './in-memory-album.repository';
 import { InMemoryPhotoRepository } from './photos/in-memory-photo.repository';
+import { AlbumAccessService } from './collaborators/album-access.service';
+import { InMemoryMembershipRepository } from './collaborators/in-memory-membership.repository';
+import { InMemoryInvitationRepository } from './collaborators/in-memory-invitation.repository';
 
 function buildService() {
   const albumRepository = new InMemoryAlbumRepository();
   const photoRepository = new InMemoryPhotoRepository();
-  const service = new AlbumsService(albumRepository, photoRepository);
-  return { service, albumRepository, photoRepository };
+  const membershipRepository = new InMemoryMembershipRepository();
+  const invitationRepository = new InMemoryInvitationRepository();
+  const albumAccess = new AlbumAccessService(
+    albumRepository,
+    membershipRepository,
+  );
+  const service = new AlbumsService(
+    albumRepository,
+    photoRepository,
+    membershipRepository,
+    invitationRepository,
+    albumAccess,
+  );
+  return {
+    service,
+    albumRepository,
+    photoRepository,
+    membershipRepository,
+    invitationRepository,
+  };
 }
 
 const OWNER = 'owner-1';
@@ -28,23 +49,24 @@ describe('AlbumsService', () => {
     });
   });
 
-  it('lists only the caller´s own albums', async () => {
+  it('lists only the caller´s own albums, with role "owner"', async () => {
     const { service } = buildService();
     await service.create(OWNER, 'Mío 1');
     await service.create(OWNER, 'Mío 2');
     await service.create(OTHER_USER, 'De otra persona');
 
-    const albums = await service.listForOwner(OWNER);
+    const albums = await service.listForUser(OWNER);
 
     expect(albums).toHaveLength(2);
     expect(albums.map((a) => a.name).sort()).toEqual(['Mío 1', 'Mío 2']);
+    expect(albums.every((a) => a.role === 'owner')).toBe(true);
   });
 
   it('gets an owned album with its (currently empty) photos', async () => {
     const { service } = buildService();
     const created = await service.create(OWNER, 'Mi álbum');
 
-    const detail = await service.getForOwner(OWNER, created.id);
+    const detail = await service.getForUser(OWNER, created.id);
 
     expect(detail.photos).toEqual([]);
     expect(detail.photoCount).toBe(0);
@@ -62,7 +84,7 @@ describe('AlbumsService', () => {
   it('returns 404 for a nonexistent album', async () => {
     const { service } = buildService();
 
-    await expect(service.getForOwner(OWNER, 'does-not-exist')).rejects.toThrow(
+    await expect(service.getForUser(OWNER, 'does-not-exist')).rejects.toThrow(
       NotFoundException,
     );
   });
@@ -71,7 +93,7 @@ describe('AlbumsService', () => {
     const { service } = buildService();
     const theirs = await service.create(OTHER_USER, 'No es tuyo');
 
-    await expect(service.getForOwner(OWNER, theirs.id)).rejects.toThrow(
+    await expect(service.getForUser(OWNER, theirs.id)).rejects.toThrow(
       NotFoundException,
     );
     await expect(
@@ -87,7 +109,7 @@ describe('AlbumsService', () => {
 
     const photo = await photoRepository.create({
       ownerId: OWNER,
-      driveFileId: 'drive-file-1',
+      storageRef: { provider: 'google-drive', fileId: 'drive-file-1' },
     });
     const albumA = await service.create(OWNER, 'Álbum A');
     const albumB = await service.create(OWNER, 'Álbum B');
@@ -97,12 +119,12 @@ describe('AlbumsService', () => {
     await service.delete(OWNER, albumA.id);
 
     // Album A is gone entirely.
-    await expect(service.getForOwner(OWNER, albumA.id)).rejects.toThrow(
+    await expect(service.getForUser(OWNER, albumA.id)).rejects.toThrow(
       NotFoundException,
     );
 
     // Album B keeps the photo — the relation to A's deletion didn't leak.
-    const remaining = await service.getForOwner(OWNER, albumB.id);
+    const remaining = await service.getForUser(OWNER, albumB.id);
     expect(remaining.photos.map((p) => p.id)).toEqual([photo.id]);
 
     // The photo itself was never touched.
@@ -117,5 +139,60 @@ describe('AlbumsService', () => {
     await albumRepository.addPhoto(album.id, 'photo-1');
 
     expect(await albumRepository.countPhotos(album.id)).toBe(1);
+  });
+
+  // --- spec05-colaboradores.md: membership-aware reads and cascade delete ---
+
+  it('includes albums where the caller collaborates, with role "collaborator"', async () => {
+    const { service, membershipRepository } = buildService();
+    const owned = await service.create(OWNER, 'Mío');
+    const theirs = await service.create(OTHER_USER, 'De otra persona');
+    await membershipRepository.addCollaborator(theirs.id, OWNER);
+
+    const albums = await service.listForUser(OWNER);
+
+    expect(albums).toHaveLength(2);
+    const roleById = new Map(albums.map((a) => [a.id, a.role]));
+    expect(roleById.get(owned.id)).toBe('owner');
+    expect(roleById.get(theirs.id)).toBe('collaborator');
+  });
+
+  it('lets a collaborator (not just the owner) read the album detail', async () => {
+    const { service, membershipRepository } = buildService();
+    const theirs = await service.create(OTHER_USER, 'De otra persona');
+    await membershipRepository.addCollaborator(theirs.id, OWNER);
+
+    const detail = await service.getForUser(OWNER, theirs.id);
+
+    expect(detail.photos).toEqual([]);
+  });
+
+  it('a user with no membership at all still gets a uniform 404', async () => {
+    const { service, membershipRepository } = buildService();
+    const theirs = await service.create(OTHER_USER, 'De otra persona');
+    // A third, unrelated user — never made a collaborator.
+    await membershipRepository.addCollaborator(theirs.id, 'someone-else');
+
+    await expect(service.getForUser(OWNER, theirs.id)).rejects.toThrow(
+      NotFoundException,
+    );
+  });
+
+  it('deleting an album cleans up its memberships and invitations too (D16)', async () => {
+    const { service, membershipRepository, invitationRepository } =
+      buildService();
+    const album = await service.create(OWNER, 'A borrar');
+    await membershipRepository.addCollaborator(album.id, OTHER_USER);
+    await invitationRepository.create({
+      albumId: album.id,
+      token: 'a-token',
+      createdBy: OWNER,
+      expiresAt: new Date(Date.now() + 86_400_000),
+    });
+
+    await service.delete(OWNER, album.id);
+
+    expect(await membershipRepository.listCollaborators(album.id)).toEqual([]);
+    expect(await invitationRepository.listByAlbum(album.id)).toEqual([]);
   });
 });

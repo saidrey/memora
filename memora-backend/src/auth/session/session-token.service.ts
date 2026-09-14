@@ -63,7 +63,10 @@ export class SessionTokenService {
     );
   }
 
-  private verify(token: string, expectedType: SessionTokenType): SessionJwtPayload {
+  private verify(
+    token: string,
+    expectedType: SessionTokenType,
+  ): SessionJwtPayload {
     let payload: SessionJwtPayload;
     try {
       payload = this.jwtService.verify<SessionJwtPayload>(token, {

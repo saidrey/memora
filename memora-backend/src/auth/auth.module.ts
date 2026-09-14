@@ -3,9 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
-import {
-  GOOGLE_AUTH_CLIENT,
-} from './google-auth/google-auth-client.interface';
+import { GOOGLE_AUTH_CLIENT } from './google-auth/google-auth-client.interface';
 import { GoogleOAuthClient } from './google-auth/google-oauth.client';
 import { SessionAuthGuard } from './session/session-auth.guard';
 import { SessionRegistry } from './session/session-registry';
@@ -16,7 +14,10 @@ import { USER_REPOSITORY } from './users/user-repository.interface';
 import { InMemoryUserRepository } from './users/in-memory-user.repository';
 
 @Module({
-  imports: [ConfigModule.forRoot(), JwtModule.register({})],
+  // isGlobal: true so other modules (e.g. AlbumsModule's InvitationsService,
+  // spec05-colaboradores.md) can inject ConfigService without importing
+  // ConfigModule themselves.
+  imports: [ConfigModule.forRoot({ isGlobal: true }), JwtModule.register({})],
   controllers: [AuthController],
   providers: [
     AuthService,
@@ -31,6 +32,9 @@ import { InMemoryUserRepository } from './users/in-memory-user.repository';
   // their own endpoints with the same session check — its own dependency
   // (SessionTokenService) must be exported too, or Nest fails to resolve
   // it when instantiating the guard in the importing module's context.
-  exports: [SessionAuthGuard, SessionTokenService],
+  // AuthService is exported too (spec08-abstraccion-almacenamiento.md):
+  // GoogleDrivePhotoStorage (AlbumsModule) injects it to reuse
+  // getDriveAccessToken instead of duplicating the refresh-token lookup.
+  exports: [SessionAuthGuard, SessionTokenService, AuthService],
 })
 export class AuthModule {}

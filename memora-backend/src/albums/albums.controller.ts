@@ -34,12 +34,12 @@ export class AlbumsController {
 
   @Get()
   list(@CurrentUser() user: { id: string }) {
-    return this.albumsService.listForOwner(user.id);
+    return this.albumsService.listForUser(user.id);
   }
 
   @Get(':id')
   get(@CurrentUser() user: { id: string }, @Param('id') id: string) {
-    return this.albumsService.getForOwner(user.id, id);
+    return this.albumsService.getForUser(user.id, id);
   }
 
   @Patch(':id')
@@ -73,7 +73,7 @@ export class AlbumsController {
     await this.photosService.associate(user.id, albumId, photoId);
   }
 
-  /** Removes the relation only — never the photo or its Drive file (D3/D4). */
+  /** Removes the relation only — never the photo or its storage file (D3/D4). */
   @Delete(':albumId/photos/:photoId')
   @HttpCode(HttpStatus.NO_CONTENT)
   async disassociatePhoto(

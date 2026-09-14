@@ -62,7 +62,10 @@ Cada archivo `specNN-<nombre>.md` contiene:
 - `spec02-autenticacion-google.md` — login con Google (flujo híbrido), sesión JWT propia y broker de tokens de Drive (scope `drive.file`).
 - `spec03-biblioteca-albumes.md` — modelo y API de álbumes y biblioteca personal (M2); relación N:M foto↔álbum.
 - `spec04-fotografias.md` — registro de fotos (referencias/metadatos) y coordinación de subida a Drive (M3 backend); biblioteca.
-- `spec05-colaboradores.md` — invitaciones por enlace y roles Owner/Collaborator (M4 backend). Estado: BORRADOR / en aprobación de decisiones abiertas.
+- `spec05-colaboradores.md` — invitaciones por enlace y roles Owner/Collaborator (M4 backend). Estado: PASS.
+- `spec06-adoptar.md` — "Guardar en mi biblioteca" / copia de foto de colaborador (M5 backend). Estado: ⏸️ DIFERIDA A POST-MVP (no viable de forma transparente con `drive.file`; decisión del PO). Conserva el análisis técnico.
+- `spec07-disponibilidad.md` — disponibilidad perezosa de fotos en Drive (M6 backend); cliente verifica → backend persiste. Estado: PASS.
+- `spec08-abstraccion-almacenamiento.md` — abstracción `PhotoStorage` + referencia neutral `storageRef` (Drive detrás de interfaz; habilitador de storage futuro/M5). Estado: PASS.
 
 ### memora-web/
 - `spec01-fundacion-web.md` — esqueleto Next.js y capa de acceso a la API.
