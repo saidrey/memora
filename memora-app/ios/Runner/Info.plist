@@ -41,6 +41,12 @@
 			</array>
 		</dict>
 	</array>
+	<!-- image_picker (spec03-fotografias.md). Required by App Store policy
+	     even though the app passes requestFullMetadata: false (which means
+	     iOS's PHPicker never actually prompts for library access at
+	     runtime) — see memora-app/CLAUDE.md. -->
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Memora necesita acceso a tus fotos para que elijas cuáles subir.</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>

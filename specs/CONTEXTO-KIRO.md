@@ -23,7 +23,7 @@
 - **Founder/PO** (el usuario): decide producto y reglas de negocio. Única autoridad sobre D1–D17.
 - **Kiro (Tech Lead):** especifica, valida contra criterios, **no inventa reglas de producto**. Si falta una decisión, la pregunta con **opciones + recomendación + impacto**.
 - **Claude:** implementa según specs y reporta. No redefine producto.
-- **Ciclo:** Kiro escribe spec → PO aprueba (incl. decisiones abiertas) → Kiro entrega prompt a Claude → Claude implementa → Kiro valida (**PASS / PASS WITH NOTES / CHANGES REQUIRED**).
+- **Ciclo (metodología vigente desde 2026-09-14):** Kiro escribe spec → PO aprueba (incl. decisiones abiertas) → Kiro entrega prompt a Claude → Claude implementa → **el PO valida en el dispositivo/entorno real**. **Kiro ya NO valida por defecto** (no se corre `spec-validator`) para ahorrar tokens; la validación por Kiro queda **opcional/bajo demanda** si el PO la pide. (La FASE 1 backend ya cerrada sí fue validada por Kiro en su momento.)
 - **Capas, en orden:** backend primero → app → web.
 
 > Fuente completa del rol y ciclo: `ESTADO.md` §Roles y `specs/README.md`.
@@ -99,7 +99,14 @@ Numeración **independiente por carpeta**. Estados los asigna Kiro.
 - `spec11-session-registry-interface.md` — PASS (deuda A1.5 backend: `SessionRegistry` → interfaz + token `SESSION_REGISTRY` + `InMemorySessionRegistry`; sin cambio de comportamiento). **Cierra FASE 1 backend.**
 
 **`specs/memora-app/`**
-- `spec01-fundacion-app.md`, `spec02-login-google.md`.
+- `spec01-fundacion-app.md`, `spec02-login-google.md` — PASS.
+- `spec03-fotografias.md` — ✅ VALIDADO EN DISPOSITIVO por el PO (M3 app: seleccionar/optimizar D15 sin GPS/subir bytes a Drive carpeta "Memora"/registrar con `storageRef`; detecta `DRIVE_REAUTHORIZATION_REQUIRED`).
+- `spec04-ui-albumes.md` — APROBADA, en implementación (UI de álbumes app: lista propios+colaborando con rol, crear, detalle con miniaturas de Drive vía drive-token, renombrar/visibility/eliminar owner-only, agregar fotos reusando spec03/quitar del álbum; Navigator nativo; extiende ApiClient con PATCH/DELETE).
+- `spec05-ui-colaboradores.md` — APROBADA (M4 app: invitar por enlace/administrar/quitar/revocar owner-only, aceptar por token, abandonar; consume backend spec05).
+- `spec06-sesion-y-reauth-drive.md` — APROBADA (A1.5 refresh automático del JWT centralizado en `ApiClient` + A1.6 reconectar Drive sin logout, D10; consume backend spec02).
+- `spec07-compartir-nfc-qr.md` — APROBADA (M7/M8 app: compartir enlace + QR en cliente `qr_flutter` + gestionar tags NFC/QR owner-only; escritura NFC física y visor anónimo fuera de alcance —visor es web FASE 3).
+- `spec08-visor-foto-inapp.md` — APROBADA (visor de foto a pantalla completa in-app: full-res desde Drive con drive-token, zoom/pan/swipe con `photo_view`, `unavailable` M6; se abre desde el detalle de álbum spec04).
+- `spec09-programar-nfc.md` — APROBADA (M8 escritura NFC nativa con `nfc_manager`: escribe NDEF URI `https://memora.app/n/{token}` obtenido del backend, verifica, bloqueo solo-lectura solo Android —iOS Core NFC no lo soporta).
 
 **`specs/memora-web/`**
 - `spec01-fundacion-web.md` — EN PAUSA (prioridad, no exclusión).

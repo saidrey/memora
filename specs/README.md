@@ -76,6 +76,13 @@ Cada archivo `specNN-<nombre>.md` contiene:
 ### memora-app/
 - `spec01-fundacion-app.md` — esqueleto Flutter y capa de acceso a la API.
 - `spec02-login-google.md` — inicio de sesión con Google (nativo), obtención de `serverAuthCode`, sesión con el backend y estado de autenticación.
+- `spec03-fotografias.md` — seleccionar fotos del dispositivo, optimización automática (D15, sin GPS/EXIF D8), subida directa de bytes a Drive con `drive-token` y registro en backend con `storageRef` (M3 app). Estado: ✅ VALIDADO EN DISPOSITIVO por el PO.
+- `spec04-ui-albumes.md` — UI de álbumes en la app: lista (propios + colaborando con rol), crear, abrir/ver fotos (miniaturas de Drive), renombrar/visibility/eliminar (owner-only), agregar/quitar fotos (M2/M3 app). Estado: APROBADA, lista para implementar.
+- `spec05-ui-colaboradores.md` — UI de colaboradores (M4 app): owner invita por enlace/administra/quita/revoca, invitado acepta, colaborador abandona (D1/D5/D12/D13). Estado: APROBADA, lista para implementar.
+- `spec06-sesion-y-reauth-drive.md` — refresh automático del JWT de sesión (A1.5) + re-autorización de Drive sin logout (A1.6/D10), centralizado en `ApiClient`. Estado: APROBADA, lista para implementar.
+- `spec07-compartir-nfc-qr.md` — compartir álbum (enlace M7), gestionar visibilidad, crear/mostrar QR y gestionar etiquetas NFC/QR (M8) desde la app, owner-only. Estado: APROBADA, lista para implementar.
+- `spec08-visor-foto-inapp.md` — visor de foto a pantalla completa en la app: tocar miniatura → imagen full-res desde Drive, zoom/pan y swipe entre fotos, estado "no disponible" (M6). Estado: APROBADA, lista para implementar.
+- `spec09-programar-nfc.md` — programar etiqueta NFC física desde la app (M8): escribir NDEF URI con la url estable de Memora, verificar, bloqueo a solo-lectura opcional (solo Android). Estado: APROBADA, lista para implementar.
 
 ## Decisiones técnicas fijadas (aprobadas por el Product Owner)
 

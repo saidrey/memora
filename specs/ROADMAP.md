@@ -36,12 +36,14 @@ Orden tentativo (se detalla al llegar; cada uno tendrá su spec en `memora-app/`
 
 | # | Alcance | Estado |
 |---|---------|--------|
-| A | M3 app: seleccionar fotos, optimizar (D15), subir bytes directo a Drive usando `drive-token` | ⬜ PENDIENTE |
-| B | UI de álbumes: crear/ver/abrir/renombrar/eliminar (consume M2/M3 backend) | ⬜ PENDIENTE |
-| C | UI de colaboradores: invitar/aceptar/administrar/abandonar (consume M4 backend) | ⬜ PENDIENTE |
+| A | M3 app: seleccionar fotos, optimizar (D15), subir bytes directo a Drive usando `drive-token` — `memora-app/spec03-fotografias.md` | ✅ VALIDADO EN DISPOSITIVO (PO, 2026-09-14: sube a carpeta "Memora" en Drive) |
+| B | UI de álbumes: crear/ver/abrir/renombrar/eliminar (consume M2/M3 backend) — `memora-app/spec04-ui-albumes.md` | 🟡 EN CURSO (spec APROBADA → pendiente de que Claude implemente y el PO valide en dispositivo) |
+| C | UI de colaboradores: invitar/aceptar/administrar/abandonar (consume M4 backend) — `memora-app/spec05-ui-colaboradores.md` | 🟡 EN CURSO (spec APROBADA → pendiente de que Claude implemente y el PO valide) |
 | D | ~~UI de adopción "Guardar en mi biblioteca" (consume M5)~~ | ⏸️ DIFERIDA (M5 fuera del MVP) |
-| E | A1.5 refresh de sesión en app + A1.6 re-autorización de Drive (D10) | ⬜ PENDIENTE |
-| F | Compartir/visor desde app + NFC/QR (consume M7/M8) | ⬜ PENDIENTE |
+| E | A1.5 refresh de sesión en app + A1.6 re-autorización de Drive (D10) — `memora-app/spec06-sesion-y-reauth-drive.md` | 🟡 EN CURSO (spec APROBADA → pendiente de que Claude implemente y el PO valide) |
+| F | Compartir/visor desde app + NFC/QR (consume M7/M8) — `memora-app/spec07-compartir-nfc-qr.md` | 🟡 EN CURSO (spec APROBADA → pendiente de que Claude implemente y el PO valide) |
+| G | Visor de foto a pantalla completa in-app (zoom/pan/swipe) — `memora-app/spec08-visor-foto-inapp.md` | 🟡 EN CURSO (spec APROBADA → pendiente de que Claude implemente y el PO valide) |
+| H | Programar etiqueta NFC física desde la app (M8, escritura NDEF nativa) — `memora-app/spec09-programar-nfc.md` | 🟡 EN CURSO (spec APROBADA → pendiente de que Claude implemente y el PO valide) |
 
 Ya PASS en app: fundación (`memora-app/spec01`), login Google (`memora-app/spec02`).
 

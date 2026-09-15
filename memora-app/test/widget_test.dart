@@ -2,7 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:image_picker/image_picker.dart';
 
+import 'package:memora_app/albums/albums_api.dart';
+import 'package:memora_app/albums/albums_controller.dart';
+import 'package:memora_app/albums/collaborators_api.dart';
+import 'package:memora_app/albums/drive_thumbnail_service.dart';
+import 'package:memora_app/albums/sharing_api.dart';
 import 'package:memora_app/api/api_client.dart';
 import 'package:memora_app/api/health_api.dart';
 import 'package:memora_app/auth/auth_api.dart';
@@ -10,6 +16,11 @@ import 'package:memora_app/auth/auth_controller.dart';
 import 'package:memora_app/auth/auth_models.dart';
 import 'package:memora_app/auth/google_auth_service.dart';
 import 'package:memora_app/auth/session_storage.dart';
+import 'package:memora_app/photos/drive_token_api.dart';
+import 'package:memora_app/photos/drive_upload_service.dart';
+import 'package:memora_app/photos/photo_optimizer.dart';
+import 'package:memora_app/photos/photo_upload_controller.dart';
+import 'package:memora_app/photos/photos_api.dart';
 import 'package:memora_app/screens/home_screen.dart';
 
 ApiClient _healthyApiClient() {
@@ -38,23 +49,57 @@ AuthController _authController(ApiClient apiClient) {
   );
 }
 
+AlbumsController _albumsController(ApiClient apiClient) {
+  return AlbumsController(
+    AlbumsApi(apiClient),
+    CollaboratorsApi(apiClient),
+    SharingApi(apiClient),
+  );
+}
+
+DriveThumbnailService _driveThumbnailService(ApiClient apiClient) {
+  return DriveThumbnailService(driveTokenApi: DriveTokenApi(apiClient));
+}
+
+/// A PhotoUploadController wired to real collaborators. These tests never
+/// trigger `pickAndUploadPhotos`/`uploadPickedFiles`, so none of its
+/// plugin-backed collaborators (ImagePicker, PhotoOptimizer) ever run —
+/// see photo_upload_controller_test.dart for the orchestration logic itself.
+PhotoUploadController _photoUploadController(ApiClient apiClient) {
+  return PhotoUploadController(
+    imagePicker: ImagePicker(),
+    photoOptimizer: const PhotoOptimizer(),
+    driveTokenApi: DriveTokenApi(apiClient),
+    driveUploadService: DriveUploadService(),
+    photosApi: PhotosApi(apiClient),
+  );
+}
+
 void main() {
-  testWidgets('shows the login button and backend status when unauthenticated', (
-    tester,
-  ) async {
-    final apiClient = _healthyApiClient();
-    final auth = _authController(apiClient)..status = AuthStatus.unauthenticated;
+  testWidgets(
+    'shows the login button and backend status when unauthenticated',
+    (tester) async {
+      final apiClient = _healthyApiClient();
+      final auth = _authController(apiClient)
+        ..status = AuthStatus.unauthenticated;
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: HomeScreen(healthApi: HealthApi(apiClient), authController: auth),
-      ),
-    );
-    await tester.pumpAndSettle();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: HomeScreen(
+            healthApi: HealthApi(apiClient),
+            authController: auth,
+            photoUploadController: _photoUploadController(apiClient),
+            albumsController: _albumsController(apiClient),
+            driveThumbnailService: _driveThumbnailService(apiClient),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    expect(find.text('Iniciar sesión con Google'), findsOneWidget);
-    expect(find.text('Backend: ok'), findsOneWidget);
-  });
+      expect(find.text('Iniciar sesión con Google'), findsOneWidget);
+      expect(find.text('Backend: ok'), findsOneWidget);
+    },
+  );
 
   testWidgets('shows user info and a logout button when authenticated', (
     tester,
@@ -66,7 +111,13 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        home: HomeScreen(healthApi: HealthApi(apiClient), authController: auth),
+        home: HomeScreen(
+          healthApi: HealthApi(apiClient),
+          authController: auth,
+          photoUploadController: _photoUploadController(apiClient),
+          albumsController: _albumsController(apiClient),
+          driveThumbnailService: _driveThumbnailService(apiClient),
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -86,7 +137,13 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        home: HomeScreen(healthApi: HealthApi(apiClient), authController: auth),
+        home: HomeScreen(
+          healthApi: HealthApi(apiClient),
+          authController: auth,
+          photoUploadController: _photoUploadController(apiClient),
+          albumsController: _albumsController(apiClient),
+          driveThumbnailService: _driveThumbnailService(apiClient),
+        ),
       ),
     );
     await tester.pumpAndSettle();

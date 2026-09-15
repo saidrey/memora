@@ -34,9 +34,9 @@ Checklist funcional del MVP, agrupado por módulos. Cada ítem está redactado c
 - ✅ B2.7 Eliminar álbum → elimina agrupación y relaciones, no las fotos (D16). *(backend + test)*
 
 ## M3 — Fotografías
-- ⬜ P3.1 Seleccionar fotos del dispositivo (sin modificar/eliminar originales). *(app)*
-- ⬜ P3.2 Optimización automática antes de subir (D15). *(app)*
-- 🟡 P3.3 Subir la foto al Drive del usuario. *(backend coordina ✅ spec04; subida real de bytes = app)*
+- ✅ P3.1 Seleccionar fotos del dispositivo (sin modificar/eliminar originales). *(app spec03, validado en dispositivo por el PO)*
+- ✅ P3.2 Optimización automática antes de subir (D15, sin GPS/EXIF). *(app spec03, validado por el PO)*
+- ✅ P3.3 Subir la foto al Drive del usuario (carpeta "Memora"). *(backend coordina ✅ spec04; subida real de bytes ✅ app spec03, validado en dispositivo por el PO)*
 - ✅ P3.4 Memora registra `fileId` + metadatos mínimos (D8) y la relación con el álbum. *(backend spec04)*
 - 🟡 P3.5 Ver las fotos dentro del álbum (thumbnails/preview). *(backend expone referencias ✅; UI = app)*
 - ✅ P3.6 Agregar más fotos a un álbum existente en cualquier momento. *(backend spec04)*

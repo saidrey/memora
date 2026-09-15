@@ -4,6 +4,8 @@ Recordatorio del flujo por cada spec. Tú (PO) orquestas; los agentes hacen el t
 
 > **Importante:** los agentes de Kiro (`spec-writer`, `spec-validator`) **los eliges tú** en el *agent picker* — el nombre del agente en la barra inferior del panel de chat. Kiro no cambia de agente solo; sí puede llamar sub-agentes internamente, pero el flujo de roles con contexto/permisos aislados lo activas tú cambiando de agente.
 
+> **CAMBIO DE METODOLOGÍA (2026-09-14, decisión del PO — vigente).** Para ahorrar tokens, **Kiro ya NO valida las implementaciones** (no se corre `spec-validator` por defecto). El flujo pasa a ser: **Kiro escribe la spec → PO aprueba decisiones → Claude implementa → el PO valida en el dispositivo/entorno real** que la app hace lo que la spec dice. El `spec-validator` queda disponible por si el PO lo pide explícitamente, pero no es un paso obligatorio. Los pasos 4–5 de abajo (validación por Kiro) quedan como **opcionales/bajo demanda**.
+
 ---
 
 ## Los 3 agentes
@@ -36,24 +38,17 @@ Claude (implementador) vive en **Claude Code**, aparte, con su memoria Engram.
 
 **Reporte de cierre que Claude debe darte** (ya incluido en el prompt de Claude):
 - Qué spec implementó (número + nombre).
-- Resultado de `npm run build`, `npm test`, `npm run test:e2e` (conteos).
+- Resultado de `flutter analyze`/compilación (app) o `build`+tests (backend).
 - Checklist de la spec marcado.
 - Desviaciones/dudas, si las hubo.
 
-Con eso ya sabes que está listo para validar. No tienes que revisar el código tú.
-
-### Paso 4 — Validar (agente `spec-validator`)
-7. En el agent picker cambia a **spec-validator**.
-8. Dile una de estas dos (ambas funcionan; el agente lee el ROADMAP y sabe cuál está 🟡 EN CURSO):
-   - *"Valida la spec de M4 (spec05-colaboradores)."* — si quieres nombrarla.
-   - *"Claude terminó, valida lo que está pendiente de validación."* — si no quieres recordar el número.
-9. Corre build + tests + grep dirigido y emite veredicto:
-   - **PASS** → marca ✅ en el ROADMAP y pasas al siguiente módulo (paso 1).
-   - **PASS WITH NOTES** → aceptable, con observaciones anotadas.
-   - **CHANGES REQUIRED** → te dice exactamente qué falta; se lo pasas de vuelta a Claude (paso 3) y repites.
+### Paso 4 — Validar en el dispositivo/entorno real (tú, el PO)
+7. **La validación la haces tú**: corres la app en el dispositivo (o la web en el navegador) y confirmas que hace lo que la spec dice. Kiro ya no ejecuta `spec-validator` por defecto (decisión de metodología del PO, para ahorrar tokens de review).
+8. Si algo no cumple la spec, se lo pasas de vuelta a Claude (paso 3) con lo que viste.
+9. *(Opcional)* Si en algún módulo quieres una revisión estática de código/tests por Kiro, pídelo explícitamente: cambia a `spec-validator` y di *"valida lo que está pendiente de validación"*. No es obligatorio.
 
 ### Paso 5 — Cerrar
-10. Con PASS, se actualizan `ESTADO.md`, `backlog-mvp.md` y el índice de `CONTEXTO-KIRO.md`. Siguiente módulo → paso 1.
+10. Cuando tú das por buena la spec en el dispositivo, avisas a Kiro (o al `spec-writer`) para marcar el ítem como implementado en `ROADMAP.md`/`ESTADO.md`/`backlog-mvp.md` y pasar al siguiente. Siguiente módulo → paso 1.
 
 ---
 
@@ -72,14 +67,15 @@ La secuencia vive en **`specs/ROADMAP.md`**. Ahí está el orden por fases y qu�
 
 ---
 
-## Reparto de validación por capa (acuerdo con el PO)
+## Reparto de validación (metodología vigente desde 2026-09-14)
 
-- **Backend:** el `spec-validator` valida completo (build + unit + e2e + grep dirigido) en Kiro.
-- **App (Flutter) y Web:** el `spec-validator` verifica lo que pueda de forma estática (que el código cumple la spec, análisis, tests automatizados si el toolchain está disponible) y reporta qué no pudo ejecutar. **Las pruebas de usuario en app y web las hace el PO** en su entorno (dispositivo real / navegador). El veredicto del agente en esas capas es sobre código y criterios, no sustituye la prueba manual del PO.
+- **Por defecto, Kiro NO valida.** El PO valida cada spec en el dispositivo/entorno real (la app hace lo que la spec dice). Esto ahorra tokens de review.
+- **Backend (histórico):** las specs de backend ya cerradas (FASE 1) fueron validadas por Kiro con `spec-validator` (build + unit + e2e + grep). A partir de ahora, si se toca backend de nuevo, la validación por Kiro es **opcional/bajo demanda**.
+- **App (Flutter) y Web:** las pruebas las hace el **PO** en su entorno (dispositivo real / navegador). Kiro puede, si el PO lo pide explícitamente, hacer una revisión estática (que el código cumple la spec, `flutter analyze`), pero no es un paso obligatorio ni sustituye la prueba del PO.
 
 ## Reglas que los agentes ya conocen (no hace falta repetirlas)
 
-- No inventar reglas de producto: si falta una decisión, se pregunta con opciones + recomendación + impacto. Fuente de verdad de producto: `specs/producto-mvp.md` (D1–D16).
+- No inventar reglas de producto: si falta una decisión, se pregunta con opciones + recomendación + impacto. Fuente de verdad de producto: `specs/producto-mvp.md` (D1–D17).
 - Entorno: NestJS 10 / Node 20; no `npm -g`; no tocar `.npmrc`.
 - Validación quirúrgica: build + tests + grep; leer código completo solo si algo falla o la spec es sensible.
 - Arranque en frío: siempre por `specs/CONTEXTO-KIRO.md` (mapa+punteros; no reemplaza las fuentes).
@@ -105,4 +101,4 @@ Copia esto a Claude Code cambiando el nombre de la spec:
 - **"¿Dónde estoy? / ¿qué sigue?"** → cambia a `spec-writer` y di *"continuemos con la siguiente spec"*; o abre `specs/ROADMAP.md`.
 - **"¿Cuál es el estado?"** → `specs/ROADMAP.md` (secuencia) y `specs/ESTADO.md` (detalle).
 - **"¿Qué falta del MVP?"** → `specs/backlog-mvp.md`.
-- **Validar lo de Claude** → cambia a `spec-validator` y di *"valida lo que está pendiente de validación"*.
+- **Validar lo de Claude** → lo pruebas tú en el dispositivo. *(Opcional: si quieres revisión estática por Kiro, cambia a `spec-validator` y di "valida lo que está pendiente de validación".)*

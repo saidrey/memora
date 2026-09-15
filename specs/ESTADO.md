@@ -48,11 +48,15 @@ Completado y validado PASS:
 
 **✅ FASE 1 (BACKEND) CERRADA** (2026-09-14): todos los ítems no diferidos del backend están PASS; M5 ⏸️ diferida a post-MVP.
 
-Siguiente (FASE 2 — app, arranca cuando el PO lo indique):
-1. **M3 app** — seleccionar fotos, optimizar (D15), subir bytes directo a Drive con `drive-token`.
-2. UI de álbumes / colaboradores (consume M2/M3/M4 backend).
-3. A1.5 (parte app): refresco automático del JWT + A1.6 re-autorización de Drive (D10).
+**FASE 2 (app) — en curso:**
+- **M3 app** (`memora-app/spec03`) — seleccionar fotos, optimizar (D15, sin GPS/EXIF), subir bytes directo a Drive (carpeta "Memora") con `drive-token`, registrar con `storageRef`. ✅ **Validado en dispositivo por el PO (2026-09-14): sube a la carpeta "Memora" en Drive.**
+
+Siguiente (FASE 2 — app):
+1. UI de álbumes / colaboradores (consume M2/M3/M4 backend).
+2. A1.5 (parte app): refresco automático del JWT + A1.6 re-autorización de Drive (D10).
 Después: web (en pausa).
+
+**Metodología vigente (2026-09-14):** Kiro ya no valida por defecto; el PO valida en dispositivo. Kiro solo escribe specs, trae decisiones para OK y entrega el prompt a Claude. Ver `COMO-TRABAJAR.md`.
 
 ## Convenciones de validación (para optimizar tokens)
 - Validación quirúrgica: correr `npm run build` + tests + grep dirigido a los criterios críticos; lectura profunda de código solo si un test falla o la spec es sensible (auth, borrados, adopción).
