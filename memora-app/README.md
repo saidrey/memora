@@ -653,6 +653,117 @@ cubrieron con widget tests: el índice/lista inicial correctos, que
 "Reconectar Google Drive", y que "Reintentar" efectivamente vuelve a pedir
 la foto (`test/photo_viewer_screen_test.dart`).
 
+## Programar etiqueta NFC nativa (spec09-programar-nfc.md)
+
+Implementa `specs/memora-app/spec09-programar-nfc.md` (decisiones P1–P3
+cerradas por el PO, 2026-09-14): continúa lo que spec07 dejó diferido
+("la app muestra la URL para que el usuario la grabe con su herramienta de
+NFC de preferencia; escritura NFC nativa después"). El owner ahora puede,
+desde el mismo detalle de álbum, **escribir físicamente** un chip NFC con
+la `url` del álbum usando `nfc_manager`, con verificación post-escritura y
+bloqueo opcional a solo lectura — sin reemplazar el flujo manual de spec07,
+que sigue existiendo tal cual (ambos botones coexisten en la sección
+"Etiquetas NFC/QR").
+
+- **`lib/albums/nfc_programming_service.dart`** (nuevo) — envoltorio fino
+  sobre `nfc_manager` (4.x) + `nfc_manager_ndef` (ver CLAUDE.md sobre por
+  qué hace falta este segundo paquete: `nfc_manager` 4.0 eliminó su clase
+  `Ndef` unificada del core). `writeUrl(url, confirmOverwrite, onPhase)`
+  hace, dentro de UNA sola sesión NFC: detectar el tag → leer su NDEF
+  actual → si ya tiene contenido, pedir confirmación vía el callback
+  `confirmOverwrite` antes de seguir → escribir un único registro NDEF URI
+  con la `url` (nunca fotos/nombre de álbum/ids — `buildUriRecord`) →
+  releer y verificar byte-a-byte/string-a-string que coincide
+  (`messageHasVerifiedUri`). Lanza una excepción tipada distinta por caso
+  (`NfcCancelledException`, `NfcIncompatibleTagException`,
+  `NfcTagLockedException`, `NfcWriteFailedException`,
+  `NfcVerificationFailedException`) — nunca un error genérico. `lockReadOnly()`
+  es una sesión NFC SEPARADA (P2) que solo hace algo si
+  `supportsReadOnlyLock` (`true` solo en Android — ver CLAUDE.md sobre por
+  qué iOS se excluye deliberadamente aunque el plugin lo permitiría).
+  `buildUriRecord`/`decodeUriRecord`/`messageHasVerifiedUri` son funciones
+  puras (implementan el NFC Forum URI Record Type Definition a mano, sin
+  helper del paquete) testeadas sin hardware.
+- **`lib/albums/nfc_programming_controller.dart`** (nuevo) — `ChangeNotifier`
+  con un estado por cada paso del checklist de la spec: `waitingForTag`,
+  `confirmingOverwrite`, `writing`, `verifying`, `success`, `cancelled`, y
+  un valor de error DISTINTO por caso (`errorIncompatibleTag`,
+  `errorTagLocked`, `errorWriteFailed`, `errorVerificationFailed`,
+  `errorNfcUnavailable`, `errorUnknown`) — `statusMessage` da un texto fijo
+  y distinto para cada uno (nunca el genérico de la app para estos casos).
+  `retry()` reintenta con el MISMO `NfcQrTag`/token/url (P3), nunca crea uno
+  nuevo. `cancel()` resuelve de forma fiable incluso en Android, donde la
+  sesión real no avisa que se detuvo — ver el gotcha de `Future.any` en
+  CLAUDE.md. `lockReadOnly()` es un método totalmente separado del flujo de
+  escritura (P2), con su propio estado (`isLockingReadOnly`/
+  `lockedReadOnly`/`lockReadOnlyErrorMessage`). No depende de
+  `AlbumsController` — la creación del tag (P1) y su `disable` (P3, si el
+  usuario desiste) siguen siendo responsabilidad de `AlbumsController`,
+  reutilizadas tal cual desde la pantalla.
+- **`lib/albums/screens/nfc_programming_screen.dart`** (nueva pantalla) —
+  recibe el `NfcQrTag` YA CREADO (la pantalla nunca llama a la API: eso lo
+  hace `AlbumDetailScreen._programNfcTag` antes de navegar, reutilizando
+  `AlbumsController.createNfcQrTag(NfcQrTagType.nfc)` — sin una segunda
+  llamada `POST`). Muestra el estado actual con un mensaje claro; mientras
+  espera el tag ofrece "Cancelar"; si el tag ya tenía datos, muestra un
+  diálogo de confirmación explícita antes de sobrescribir; en éxito, ofrece
+  "Bloquear como solo lectura" (con diálogo de advertencia de
+  irreversibilidad) SOLO si `supportsReadOnlyLock` — en iOS se muestra en
+  su lugar un texto explicando que Core NFC no lo soporta de forma fiable;
+  en cualquier error/cancelación ofrece "Reintentar" (mismo tag/token/url)
+  y "Deshabilitar etiqueta" (P3: si el usuario desiste, reutiliza
+  `AlbumsController.disableNfcQrTag` — el mismo soft-delete lógico que ya
+  usaba el botón "Bloquear" de spec07, nunca automático).
+- **`lib/albums/screens/album_detail_screen.dart`** — nuevo botón
+  "Programar etiqueta NFC" (`_programNfcTag`), owner-only, en el mismo
+  `Wrap` que "Crear etiqueta QR"/"Crear etiqueta NFC" de spec07 — coexiste
+  con ambos, no los reemplaza ("Crear etiqueta NFC" sigue siendo el flujo
+  manual de spec07: crea el tag y muestra la URL como texto seleccionable
+  para que el usuario la grabe con su propia herramienta).
+- **`pubspec.yaml`** — se agregaron `nfc_manager` y `nfc_manager_ndef`
+  (ambos resueltos con `flutter pub add`, no fijados a mano — ver CLAUDE.md
+  para las versiones exactas resueltas y por qué hacen falta los dos
+  paquetes).
+- **Android** (`android/app/src/main/AndroidManifest.xml`) — se agregó
+  `<uses-permission android:name="android.permission.NFC" />`.
+- **iOS** (`ios/Runner/Info.plist` + `ios/Runner/Runner.entitlements`,
+  nuevo, + `project.pbxproj`) — se agregó `NFCReaderUsageDescription` al
+  plist, y el entitlement `com.apple.developer.nfc.readersession.formats =
+  [NDEF, TAG]` referenciado desde las tres configuraciones del target
+  Runner (`CODE_SIGN_ENTITLEMENTS`). Ver CLAUDE.md: esto se editó a mano
+  (sin Xcode disponible en este entorno) y compila para simulador, pero la
+  capability en el Developer Portal del bundle id real y el comportamiento
+  en un iPhone físico quedan sin verificar aquí — marcado para el PO.
+
+### Decisiones de producto ya cerradas por el PO, aplicadas tal cual (P1–P3)
+
+- **P1** — el tag se crea en el backend al INICIAR la programación
+  (reutilizando `AlbumsController.createNfcQrTag`, sin una llamada nueva);
+  si la escritura física falla, el token puede quedar huérfano (inocuo) y
+  se limpia con `disable`, nunca automáticamente.
+- **P2** — "bloquear a solo lectura" (físico, solo Android, con
+  advertencia de irreversibilidad) y `disableNfcQrTag` (lógico, backend,
+  ya existente desde spec07) son acciones completamente separadas: no
+  comparten botón, diálogo ni lógica.
+- **P3** — un fallo de escritura/verificación ofrece explícitamente
+  "Reintentar" (mismo token/url) y, si el usuario desiste, "Deshabilitar
+  etiqueta" — el usuario decide en cada paso, nunca automático.
+
+### Qué no es testeable sin dispositivo
+
+Una sesión NFC real (`NfcManager.instance.startSession`), acercar un tag
+físico (NDEF/Type 2 real, uno ya bloqueado, uno incompatible), la hoja de
+sistema real de iOS, y el bloqueo físico real a solo lectura
+(`makeReadOnly`/Core NFC `writeLock`) — igual criterio que el resto de
+plugins/gestos nativos de esta app (Google Sign-In, `image_picker`,
+`photo_view`, `share_plus`). Sí están cubiertas con `flutter test`, sin
+hardware: toda la codificación/decodificación/verificación NDEF (funciones
+puras) y el controller completo (todas las transiciones de estado, los 5
+casos de error, retry, cancel en el escenario real de Android donde la
+sesión nunca confirma que se detuvo, y el gating de plataforma de
+`lockReadOnly`) — ver `test/nfc_programming_service_test.dart` y
+`test/nfc_programming_controller_test.dart`, y el detalle en CLAUDE.md.
+
 ## Desarrollo
 
 ```bash
@@ -725,6 +836,17 @@ demás, una foto `unavailable` nunca dispara `getThumbnail`, un fallo
 `DRIVE_REAUTHORIZATION_REQUIRED` ofrece "Reconectar Google Drive", y un
 error genérico ofrece "Reintentar" que efectivamente vuelve a pedir la foto
 (`test/photo_viewer_screen_test.dart`).
+También (spec09-programar-nfc.md): la codificación/decodificación/
+verificación NDEF-URI pura, sin plugin ni hardware
+(`test/nfc_programming_service_test.dart`), y `NfcProgrammingController`
+completo contra un `NfcProgrammingService` fake — camino feliz, tag con
+contenido previo (confirmación → escribir), declinar la sobrescritura
+(cancelado), cancelar mientras se espera un tag (incluyendo el caso real de
+Android donde la sesión nunca confirma que se detuvo), NFC apagado/no
+soportado, los 5 casos de error cada uno con mensaje propio y distinto,
+`retry()` reutilizando el mismo tag, y `lockReadOnly` respetando
+`supportsReadOnlyLock` por plataforma
+(`test/nfc_programming_controller_test.dart`).
 **No** son testeables sin dispositivo: la compresión real
 (`flutter_image_compress`, plugin nativo vía MethodChannel), el selector de
 galería (`image_picker`), la subida real a Google Drive, la navegación real
@@ -732,7 +854,8 @@ entre pantallas de álbumes, el render real de las miniaturas, los diálogos
 reales de `promptDriveReconnect`/el picker real de reconexión de Google, el
 share sheet real de `share_plus`, el render real del QR (`qr_flutter`), el
 gesto real de pinch-zoom/pan/doble-toque y el render real de
-`PhotoViewGallery` (`photo_view`), y que la `url` compartida efectivamente
+`PhotoViewGallery` (`photo_view`), una sesión NFC real y acercar un tag
+físico (`nfc_manager`, spec09), y que la `url` compartida efectivamente
 resuelva en un navegador o que una etiqueta bloqueada deje de resolver, y
 el flujo completo de aceptar una invitación con una cuenta de Google real
 distinta a la del owner — se verifican en dispositivo/emulador con una

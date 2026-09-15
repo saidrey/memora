@@ -47,6 +47,16 @@
 	     runtime) — see memora-app/CLAUDE.md. -->
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Memora necesita acceso a tus fotos para que elijas cuáles subir.</string>
+	<!-- spec09-programar-nfc.md: Core NFC, for writing the album's share
+	     link (NDEF URI record) onto a physical NFC tag ("Programar etiqueta
+	     NFC", owner-only). Required by iOS whenever the app can start an NFC
+	     session, even though this app never READS a tag to navigate
+	     anywhere — see memora-app/CLAUDE.md for the entitlement this also
+	     requires (com.apple.developer.nfc.readersession.formats) and whether
+	     it could be fully wired from a text-editing agent or needs a manual
+	     Xcode capability step. -->
+	<key>NFCReaderUsageDescription</key>
+	<string>Memora necesita acceso al NFC para grabar la etiqueta del álbum en un chip físico.</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>

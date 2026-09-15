@@ -1,4 +1,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- spec09-programar-nfc.md: reading/writing NDEF tags with nfc_manager
+         (native writing, owner-only, "Programar etiqueta NFC"). Devices
+         without NFC hardware simply report NfcAvailability.unsupported at
+         runtime — this permission alone doesn't restrict install/visibility
+         on the Play Store (no <uses-feature android:required="true"> is
+         declared for the same reason: this app works fine without NFC, it's
+         one optional feature of the album-sharing flow, not a requirement). -->
+    <uses-permission android:name="android.permission.NFC" />
     <application
         android:label="memora_app"
         android:name="${applicationName}"

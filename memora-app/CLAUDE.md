@@ -353,6 +353,63 @@ carpeta (ahí se documenta el avance porque `specs/` no se edita).
   `DriveThumbnailService` fake que resuelve en un microtask; cualquier
   futuro widget con un `Future` mutable reasignado fuera de `initState`
   (reintentos, refrescos manuales) necesita este mismo patrón.
+- **`nfc_manager` 4.x tiene una API completamente distinta a versiones
+  anteriores — verificar SIEMPRE contra el código fuente resuelto, no
+  contra lo que se recuerde de versiones viejas** (spec09-programar-nfc.md,
+  resuelto vía `flutter pub add nfc_manager` → **`nfc_manager: ^4.2.1`**,
+  que a su vez trae `ndef_record: ^1.4.2`). Desde `nfc_manager` 4.0.0 (ver su
+  `CHANGELOG.md`), la clase `Ndef` (el helper unificado
+  `Ndef.from(tag)`/lectura/escritura que existía en versiones pre-4.0) **fue
+  eliminada del paquete core** — el changelog remite explícitamente a
+  "usar el paquete `nfc_manager_ndef` o `NdefAndroid`/`NdefIos`" (las clases
+  de bajo nivel específicas de cada plataforma, con métodos distintos:
+  Android expone `writeNdefMessage`/`makeReadOnly`, iOS expone
+  `writeNdef`/`writeLock`). Esta app agregó **`nfc_manager_ndef: ^1.1.0`**
+  como dependencia adicional (no solo `nfc_manager`) específicamente para
+  recuperar esa abstracción unificada (`Ndef.from(tag)` con
+  `isWritable`/`cachedMessage`/`read()`/`write()`/`writeLock()` iguales en
+  ambas plataformas) — sin ella, `nfc_programming_service.dart` habría
+  tenido que ramificar por plataforma a mano. **Nota real de esa
+  abstracción:** `Ndef.writeLock()` de `nfc_manager_ndef` reenvía a
+  `NdefIos.writeLock()` en iOS también (Core NFC sí lo expone
+  técnicamente) — pero la propia spec09 (P2 + su análisis de compatibilidad)
+  es explícita en que ese lock de iOS no es fiable en todo el hardware de
+  chips, así que `NfcProgrammingService.supportsReadOnlyLock` devuelve
+  `false` en iOS y la UI nunca ofrece el botón ahí, aunque el plugin
+  *podría* intentarlo. Tampoco existe (en `ndef_record` 1.4.x ni en
+  `nfc_manager`/`nfc_manager_ndef`) un helper para construir/leer un
+  registro NDEF de tipo URI (el viejo `NdefRecord.createUri(Uri)` de
+  versiones pre-4.0 no tiene equivalente) — `buildUriRecord`/
+  `decodeUriRecord`/`messageHasVerifiedUri` en
+  `lib/albums/nfc_programming_service.dart` implementan a mano el NFC Forum
+  URI Record Type Definition (byte de código de abreviación + resto en
+  UTF-8), y son funciones puras 100% testeables sin hardware (ver
+  `test/nfc_programming_service_test.dart`) — si una futura versión de
+  cualquiera de estos paquetes agrega un helper equivalente, no hace falta
+  seguir manteniendo el propio, pero verificar el código fuente resuelto
+  antes de asumirlo.
+- **Cancelar una sesión NFC en Android no genera ningún callback de "el
+  usuario canceló"** (spec09-programar-nfc.md) — a diferencia de iOS, donde
+  `onSessionErrorIos` sí reporta
+  `NfcReaderErrorCodeIos.readerSessionInvalidationErrorUserCanceled` cuando
+  se descarta la hoja nativa. En Android, este botón "Cancelar" de la app es
+  la ÚNICA señal de cancelación que existe, y llamar
+  `NfcManager.instance.stopSession()` no resuelve ni rechaza el `Future` que
+  `NfcProgrammingService.writeUrl` le devolvió a quien esperaba el tag — ese
+  `Future` puede quedar pendiente para siempre. `NfcProgrammingController.start()`
+  resuelve esto con `Future.any([writeUrl(...), cancelSignal.future.then((_) =>
+  throw NfcCancelledException())])`: en vez de depender de que el plugin
+  confirme el cancel, el controller compite la llamada real contra su propia
+  señal de cancelación y usa la que resuelva primero. `Future.any` adjunta un
+  listener a AMBOS futures internamente, así que el perdedor (casi siempre la
+  sesión NFC real, abandonada a mitad de camino) nunca queda como un `Future`
+  sin oyente — no hace falta `Future.ignore()` acá, a diferencia del gotcha
+  de `late final`/campo reasignado documentado más arriba para
+  `photo_viewer_screen.dart`. Un contador `_generation` (mismo patrón que
+  otros controllers de esta app para descartar resultados obsoletos) evita
+  que un intento abandonado (por cancelar o por un `retry()` posterior)
+  pise el estado de uno más nuevo si de todos modos llega a resolver más
+  tarde.
 
 ## Seguridad
 
@@ -381,6 +438,16 @@ carpeta (ahí se documenta el avance porque `specs/` no se edita).
   interno — cumple "no exponer PII al compartir" porque la `url` no
   contiene más que el token opaco que el backend ya considera público una
   vez compartido.
+- El registro NDEF escrito en un chip físico (spec09-programar-nfc.md,
+  `NfcProgrammingService`/`buildUriRecord`) contiene **únicamente** la
+  `url` del `NfcQrTag` (`https://memora.app/n/{token}`) — nunca fotos,
+  nombre del álbum, ids internos ni ningún otro dato. Los mensajes de error
+  de `NfcWriteFailedException`/`NfcVerificationFailedException` llevan un
+  `detail` opcional pensado solo para depuración local (nunca se muestra
+  tal cual en la UI, que usa los mensajes fijos de
+  `NfcProgrammingController.statusMessage`) y ese `detail` en sí nunca
+  incluye la `url`/`token` — es el `toString()` del error nativo
+  subyacente (p. ej. un mensaje de I/O), no datos del tag.
 
 ## Tests
 
@@ -440,3 +507,64 @@ carpeta (ahí se documenta el avance porque `specs/` no se edita).
   testear más allá de pasarle la `url`) y el share sheet real de
   `share_plus` (ya sin cobertura de widget test desde spec05, mismo
   criterio aquí).
+- **spec09-programar-nfc.md**: `test/nfc_programming_service_test.dart`
+  cubre, sin ningún plugin/canal de plataforma (`NdefMessage`/`NdefRecord`/
+  `TypeNameFormat` de `ndef_record` son clases Dart puras), las funciones
+  puras de codificación NDEF: `buildUriRecord` (código de abreviación
+  correcto por prefijo — prioriza `https://www.` sobre `https://`, cae a
+  "sin abreviación" si no reconoce el esquema, nunca escribe nada fuera de
+  `type`/`payload`) y `decodeUriRecord`/`messageHasVerifiedUri` (round-trip
+  exacto, comparación estricta string-a-string, ignora otros registros no-URI
+  del mismo mensaje). `test/nfc_programming_controller_test.dart` cubre
+  `NfcProgrammingController` completo contra un `NfcProgrammingService` fake
+  (subclase que sobreescribe `checkAvailability`/`writeUrl`/`cancel`/
+  `lockReadOnly`, mismo patrón de `AuthController`/`PhotoOptimizer`): el
+  camino feliz completo (`waitingForTag` → `writing` → `verifying` →
+  `success`), que un tag con contenido previo entra en
+  `confirmingOverwrite` y espera a `resolveOverwriteConfirmation` antes de
+  escribir, que declinar sobrescribir termina en `cancelled` sin llegar a
+  escribir, que `cancel()` mientras se espera un tag refleja `cancelled` de
+  inmediato aunque la sesión real nunca confirme que se detuvo (el caso real
+  de Android, simulado con un fake cuyo `Future` jamás se resuelve por sí
+  solo), que `NfcAvailability.disabled/unsupported` nunca llega a abrir una
+  sesión, los 5 casos de error (incompatible/bloqueado/fallo de
+  escritura/fallo de verificación/desconocido) cada uno con su propio
+  `NfcProgrammingStatus` y mensaje — con un test que verifica que **todos**
+  los mensajes de `statusMessage` son distintos entre sí (nunca dos estados
+  comparten texto), que `retry()` reutiliza el mismo `NfcQrTag`/`url` (P3),
+  y `lockReadOnly` (P2): no-op donde `supportsReadOnlyLock` es `false`
+  (simula iOS), éxito donde es `true` (simula Android), y sus dos mensajes
+  de error distintos (tag incompatible vs. cualquier otra falla). **No** son
+  testeables sin dispositivo: una sesión NFC real (`NfcManager.instance.
+  startSession`), acercar un tag físico, la hoja nativa de iOS, y el
+  bloqueo físico real a solo lectura (`makeReadOnly`/`writeLock`) —
+  documentado igual que el resto de plugins/gestos nativos de esta app; lo
+  valida el PO en dispositivo.
+
+### Capability NFC de iOS: verificado por edición de texto, no por Xcode
+
+`ios/Runner/Runner.entitlements` (nuevo) declara
+`com.apple.developer.nfc.readersession.formats = [NDEF, TAG]`, y las tres
+configuraciones del target `Runner` en `project.pbxproj` (Debug/Release/
+Profile) ahora tienen `CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;`
+— editado a mano (no hay Xcode disponible en este entorno para usar la UI de
+"Signing & Capabilities"), verificado por inspección del propio
+`project.pbxproj` (no había ningún `CODE_SIGN_ENTITLEMENTS` previo en el
+proyecto, así que no se pisó nada existente) y confirmado indirectamente por
+`flutter build ios --simulator --no-codesign` (compila y linkea sin errores
+de resource/codesign relacionados a NFC). **Lo que este entorno NO puede
+verificar**: que Xcode reconozca la capability como "añadida correctamente"
+en su UI (el checkbox de "Near Field Communication Tag Reading" bajo
+Signing & Capabilities), y sobre todo que el **App ID en el Apple Developer
+Portal** tenga habilitado el NFC Tag Reading entitlement para el
+`PRODUCT_BUNDLE_IDENTIFIER` real (`app.memora.memoraApp`) — sin eso, un
+build firmado para dispositivo real (no simulador) puede fallar el
+code-signing o instalar pero con la sesión NFC rechazada en runtime aunque
+el entitlements file esté bien formado. Un simulador iOS tampoco tiene
+hardware NFC (Core NFC no funciona en absoluto ahí), así que ni siquiera
+`flutter run` en simulador puede validar el flujo real — hace falta un
+iPhone 7+ físico con un Apple Developer Team que tenga el entitlement
+habilitado. Esto queda marcado explícitamente para que el PO lo confirme/
+resuelva desde Xcode + el Developer Portal antes de probar en dispositivo
+real; no se puede dar por buena esta parte solo por haber editado el XML a
+mano.

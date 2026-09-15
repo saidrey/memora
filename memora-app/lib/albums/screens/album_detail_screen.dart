@@ -14,6 +14,7 @@ import '../albums_controller.dart';
 import '../collaborator_models.dart';
 import '../drive_thumbnail_service.dart';
 import '../sharing_models.dart';
+import 'nfc_programming_screen.dart';
 import 'photo_viewer_screen.dart';
 
 /// Album detail screen (spec04-ui-albumes.md): a grid of the album's photo
@@ -405,6 +406,27 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
     await widget.controller.createNfcQrTag(type);
   }
 
+  /// spec09-programar-nfc.md: distinct from "Crear etiqueta NFC" above
+  /// (spec07's manual flow, which only shows the URL for the user to grab
+  /// with their own NFC tool) — this creates the tag the SAME way (P1: same
+  /// `AlbumsController.createNfcQrTag` call, no duplicate POST) and then
+  /// pushes a dedicated screen that writes it to a physical tag natively via
+  /// `nfc_manager`, verifies the write, and optionally locks the chip
+  /// read-only (Android only). Both actions coexist; neither replaces the
+  /// other.
+  Future<void> _programNfcTag() async {
+    final created = await widget.controller.createNfcQrTag(NfcQrTagType.nfc);
+    if (created == null || !mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => NfcProgrammingScreen(
+          tag: created,
+          albumsController: widget.controller,
+        ),
+      ),
+    );
+  }
+
   Future<void> _confirmDisableTag(NfcQrTag tag) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -706,6 +728,15 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
                     : () => _createTag(NfcQrTagType.nfc),
                 icon: const Icon(Icons.nfc),
                 label: const Text('Crear etiqueta NFC'),
+              ),
+              // spec09-programar-nfc.md: a distinct action from "Crear
+              // etiqueta NFC" above (that one only shows the URL for manual
+              // grabbing) — this writes it to a physical tag natively and
+              // verifies it, in its own screen (`_programNfcTag`).
+              OutlinedButton.icon(
+                onPressed: controller.isMutating ? null : _programNfcTag,
+                icon: const Icon(Icons.nfc_outlined),
+                label: const Text('Programar etiqueta NFC'),
               ),
             ],
           ),
