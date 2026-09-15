@@ -10,3 +10,10 @@ process.env.JWT_SESSION_SECRET ??= 'test-jwt-session-secret';
 // per-test via ConfigModule's overrideProvider or similar.
 process.env.APP_INVITE_BASE_URL ??= 'https://memora.test/invite/{token}';
 process.env.INVITATION_TTL_DAYS ??= '7';
+// spec09-compartir-visor.md — has a code default (the dev placeholder URL),
+// same reasoning as APP_INVITE_BASE_URL above.
+process.env.APP_SHARE_BASE_URL ??= 'https://memora.test/s/{token}';
+// spec10-nfc-qr.md — its own env var (NOT a reuse of APP_SHARE_BASE_URL,
+// see memora-backend/README.md "NFC/QR (spec10-nfc-qr)" for why); same
+// has-a-code-default reasoning as the others above.
+process.env.APP_NFC_QR_BASE_URL ??= 'https://memora.test/n/{token}';

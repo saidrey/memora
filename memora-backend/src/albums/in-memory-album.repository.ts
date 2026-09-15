@@ -1,19 +1,26 @@
 import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
-import { Album } from './album.model';
+import { Album, AlbumVisibility } from './album.model';
 import { AlbumRepository } from './album-repository.interface';
+
+const DEFAULT_VISIBILITY: AlbumVisibility = 'PRIVATE';
 
 @Injectable()
 export class InMemoryAlbumRepository implements AlbumRepository {
   private readonly albumsById = new Map<string, Album>();
   private readonly photoIdsByAlbumId = new Map<string, Set<string>>();
 
-  async create(input: { ownerId: string; name: string }): Promise<Album> {
+  async create(input: {
+    ownerId: string;
+    name: string;
+    visibility?: AlbumVisibility;
+  }): Promise<Album> {
     const now = new Date();
     const album: Album = {
       id: randomUUID(),
       ownerId: input.ownerId,
       name: input.name,
+      visibility: input.visibility ?? DEFAULT_VISIBILITY,
       createdAt: now,
       updatedAt: now,
     };
@@ -34,6 +41,19 @@ export class InMemoryAlbumRepository implements AlbumRepository {
     const updated: Album = {
       ...this.requireAlbum(id),
       name,
+      updatedAt: new Date(),
+    };
+    this.albumsById.set(id, updated);
+    return updated;
+  }
+
+  async updateVisibility(
+    id: string,
+    visibility: AlbumVisibility,
+  ): Promise<Album> {
+    const updated: Album = {
+      ...this.requireAlbum(id),
+      visibility,
       updatedAt: new Date(),
     };
     this.albumsById.set(id, updated);

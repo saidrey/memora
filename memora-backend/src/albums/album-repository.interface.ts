@@ -1,4 +1,4 @@
-import { Album } from './album.model';
+import { Album, AlbumVisibility } from './album.model';
 
 export const ALBUM_REPOSITORY = Symbol('ALBUM_REPOSITORY');
 
@@ -10,10 +10,18 @@ export const ALBUM_REPOSITORY = Symbol('ALBUM_REPOSITORY');
  * (D16) can be modeled and tested now, and so M3 has a repository to call.
  */
 export interface AlbumRepository {
-  create(input: { ownerId: string; name: string }): Promise<Album>;
+  /** `visibility` defaults to `'PRIVATE'` when omitted (spec09, D17) —
+   *  same pattern as `PhotoRepository.create()` defaulting `availability`. */
+  create(input: {
+    ownerId: string;
+    name: string;
+    visibility?: AlbumVisibility;
+  }): Promise<Album>;
   findById(id: string): Promise<Album | null>;
   findByOwner(ownerId: string): Promise<Album[]>;
   rename(id: string, name: string): Promise<Album>;
+  /** spec09/D17: owner-only, changeable independently of the name. */
+  updateVisibility(id: string, visibility: AlbumVisibility): Promise<Album>;
   /** Deletes the album AND its photo relations. Never touches Photo entities. */
   delete(id: string): Promise<void>;
 

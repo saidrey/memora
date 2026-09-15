@@ -16,7 +16,10 @@ import {
   UserRepository,
 } from './users/user-repository.interface';
 import { TOKEN_STORE, TokenStore } from './tokens/token-store.interface';
-import { SessionRegistry } from './session/session-registry';
+import {
+  SESSION_REGISTRY,
+  SessionRegistry,
+} from './session/session-registry.interface';
 import { SessionTokenService } from './session/session-token.service';
 
 export interface SessionTokenPair {
@@ -38,7 +41,7 @@ export class AuthService {
     @Inject(USER_REPOSITORY) private readonly userRepository: UserRepository,
     @Inject(TOKEN_STORE) private readonly tokenStore: TokenStore,
     private readonly sessionTokenService: SessionTokenService,
-    private readonly sessionRegistry: SessionRegistry,
+    @Inject(SESSION_REGISTRY) private readonly sessionRegistry: SessionRegistry,
   ) {}
 
   async loginWithGoogle(

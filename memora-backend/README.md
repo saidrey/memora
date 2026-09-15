@@ -72,14 +72,16 @@ backend como *broker* de tokens de Drive.
 | Usuarios | `UserRepository` (`users/user-repository.interface.ts`) | `InMemoryUserRepository` (mock en memoria) |
 | Refresh token de Google | `TokenStore` (`tokens/token-store.interface.ts`) | `InMemoryTokenStore` — **frontera de cifrado documentada**: guarda el refresh token en texto plano en memoria; una implementación real DEBE cifrar antes de escribir y descifrar al leer (KMS vs. secreto de app, pendiente de infraestructura). |
 
-**Nota para Kiro** — 4ª pieza de estado no nombrada en la spec: revocar la
-sesión (logout) requiere saber qué refresh-token de sesión sigue vigente por
-usuario. Eso no encaja en ninguna de las tres interfaces de arriba (son
-sobre proveedores externos; esto es estado interno de sesión). Se implementó
-como `session/session-registry.ts`, un provider en memoria simple, **sin**
-elevarlo a una interfaz formal — si se quiere el mismo patrón de
-"mock ahora, Postgres/Redis después" para la revocación de sesión, habría
-que convertirlo en una 4ª interfaz.
+**4ª pieza de estado — revocación de sesión.** Revocar la sesión (logout)
+requiere saber qué refresh-token de sesión sigue vigente por usuario. Eso
+no encaja en ninguna de las tres interfaces de arriba (son sobre
+proveedores externos; esto es estado interno de sesión). Desde
+`spec11-session-registry-interface.md` (cierra la deuda A1.5, FASE 1) sigue
+el mismo patrón "mock ahora, Postgres/Redis después": `SessionRegistry`
+(`session/session-registry.interface.ts`, token `SESSION_REGISTRY`) +
+`InMemorySessionRegistry` (`session/in-memory-session-registry.ts`) —
+antes era una clase concreta `session-registry.ts` inyectada directo, la
+única pieza de estado del backend fuera de este patrón; ya no.
 
 ### Sesión JWT
 
@@ -657,6 +659,321 @@ respaldo).
   en cada foto (además del ya existente para `GET /library`).
 - `test/collaborators.e2e-spec.ts` — migrado a `storageRef` sin cambios de
   comportamiento.
+
+## Compartir y visor (spec09-compartir-visor)
+
+Implementa `specs/memora-backend/spec09-compartir-visor.md`: `Album.visibility`
+(D17) y un **enlace de compartición** de solo lectura que expone la
+resolución **pública** del visor. Es el **primer endpoint público** de este
+backend — todo lo demás sigue protegido por `SessionAuthGuard`.
+
+### Visibilidad del álbum (D17)
+
+`Album.visibility: 'PRIVATE' | 'PUBLIC'` (`src/albums/album.model.ts`),
+default `'PRIVATE'` al crear. Fijable opcionalmente en `POST /albums`;
+cambiable con `PATCH /albums/:id` (owner-only). Reflejada en todas las
+respuestas de álbum (`AlbumsService.toSummary`).
+
+**Importante — `visibility` NO controla el acceso al enlace de
+compartición en el MVP.** Un álbum `PRIVATE` es igual de visible por su
+enlace que uno `PUBLIC` (P5): el campo solo marca intención de producto
+para un futuro catálogo/descubrimiento, que aquí explícitamente NO se
+implementa. No lo confundas con un control de acceso real.
+
+`PATCH /albums/:id` ahora acepta `name` y/o `visibility` (antes solo
+`name`) — al menos uno de los dos debe venir, o 400 `INVALID_REQUEST`
+(`parseAlbumUpdate` en `albums.controller.ts`). Ambos pueden cambiar en la
+misma llamada.
+
+### Endpoints — gestión del enlace (autenticado, owner-only)
+
+| Método | Ruta | Qué hace |
+|---|---|---|
+| `POST` | `/api/v1/albums/:albumId/share-link` | Crea el enlace o **devuelve el existente** si ya hay uno activo (P5, uno por álbum). Responde `{ token, url }` — `url` construida sobre `APP_SHARE_BASE_URL`. |
+| `DELETE` | `/api/v1/albums/:albumId/share-link` | Revoca el enlace. Idempotente si no había enlace o ya estaba revocado. |
+
+No hay un `GET` dedicado de "estado del enlace" — el propio `POST`
+idempotente lo cubre (ver más abajo, "Decisiones").
+
+### Endpoint público — resolución del visor
+
+| Método | Ruta | Qué hace |
+|---|---|---|
+| `GET` | `/api/v1/shared/:token` | **PÚBLICO — sin `SessionAuthGuard`, sin sesión.** Dado un token válido y activo, devuelve `{ name, photos: [...] }` de solo lectura. |
+
+- Token inexistente, revocado, o cuyo álbum fue eliminado → **404 uniforme**
+  (`{ code: 'NOT_FOUND', message, requestId }`), sin distinguir el caso (P1).
+- Solo lista fotos con `availability === 'available'` — las `unavailable`
+  se **omiten** del array, nunca se marcan (P3). Esto es distinto de las
+  vistas autenticadas (`GET /albums/:id`, `GET /library`), que sí muestran
+  `unavailable` marcada (spec07).
+- Superficie mínima (P4): cada foto expone `{ id, storageRef, width?,
+  height?, mimeType?, capturedAt? }`. **NUNCA** `ownerId`, ningún id de
+  usuario, email/nombre de personas, lista de colaboradores, el token del
+  share-link, ni ningún otro token. `Photo.id` (UUID de Memora) SÍ se
+  incluye — es un identificador de lista, no una identidad de persona.
+- El backend no sirve bytes: el visor pide los bytes al proveedor con
+  `storageRef` (spec08).
+
+### Cómo queda público sin ningún mecanismo especial
+
+Este backend **nunca registra un guard global** (`APP_GUARD`) — cada
+controller aplica `@UseGuards(SessionAuthGuard)` explícitamente sobre sí
+mismo. `SharedController` (`src/albums/shared/shared.controller.ts`)
+simplemente **no lleva ese decorador** — no hace falta ningún "opt-out",
+la ausencia del guard ES el mecanismo. Sigue heredando el contrato de
+error uniforme y la correlación `x-request-id` porque `configureApp()`
+(`src/bootstrap.ts`) los aplica de forma global, independiente de los
+guards.
+
+### Modelo — `src/albums/shared/`
+
+- **`ShareLink`** (`share-link.model.ts`): `{ id, albumId, token, status:
+  'active'|'revoked', createdAt }`. Mismo patrón de token opaco que
+  `Invitation` (spec05): `randomBytes(32).toString('base64url')`.
+- **`ShareLinkRepository`** (interfaz + `Symbol` + mock en memoria,
+  `in-memory-share-link.repository.ts`): guarda **como mucho una fila por
+  `albumId`** (`Map<albumId, ShareLink>`) — eso, por construcción, es lo
+  que hace "un enlace por álbum" (P5). `create()` siempre genera una fila
+  nueva (nuevo id/token) que **reemplaza** cualquier fila anterior (activa
+  o revocada) de ese álbum — así "revocar y volver a crear" da un token
+  nuevo en vez de reactivar el viejo.
+- **`ShareLinksService`** — gestión owner-only (`createOrGetExisting`,
+  `revoke`), vía `AlbumAccessService.requireOwner`. Lee
+  `APP_SHARE_BASE_URL` con `ConfigService`, nunca `process.env` directo
+  (mismo patrón que `InvitationsService`/`APP_INVITE_BASE_URL`).
+- **`SharedViewService`** — resolución pública: busca el `ShareLink` por
+  token, exige `status === 'active'` y que el álbum todavía exista, filtra
+  fotos disponibles y proyecta al DTO mínimo (`SharedAlbumView`/
+  `SharedPhotoView`). Nunca reutiliza `AlbumDetail`/`Photo` tal cual (esos
+  sí llevan `ownerId`).
+
+### Invalidación (D16)
+
+`AlbumsService.delete()` ahora también llama a
+`shareLinks.deleteByAlbumId(albumId)`, igual que ya hacía con membresías e
+invitaciones (spec05). Es **defensa en profundidad**, no el único
+mecanismo: `SharedViewService.resolve()` además comprueba que el álbum
+siga existiendo antes de servir nada, así que aunque la fila del
+`ShareLink` sobreviviera por cualquier motivo, la resolución seguiría
+dando 404.
+
+### Decisiones tomadas dentro de la spec (sin nada pendiente de Kiro)
+
+- **"Estado del enlace consultable"** (ítem del checklist, la spec deja
+  la forma abierta): se decidió **no** añadir un `GET` dedicado. El propio
+  `POST .../share-link` ya es idempotente (P5: crea o devuelve el
+  existente) — volver a llamarlo es cómo un owner consulta el
+  token/URL vigente sin duplicar nada. Un `GET` habría expuesto exactamente
+  la misma forma (`{ token, url }`) sin ninguna diferencia de
+  comportamiento, así que se evitó una segunda ruta para la misma lectura.
+- **`name`/`visibility` en `PATCH /albums/:id`**: se decidió aceptar
+  ambos campos opcionalmente en el mismo body (en vez de, p. ej., separar
+  en dos endpoints o exigir siempre ambos) — exigiendo que **al menos
+  uno** venga (400 si no). Evita diseñar un PATCH parcial genérico
+  (JSON Merge Patch, etc.) que esta spec no pedía, y mantiene la firma
+  simple: `AlbumsService.update(ownerId, albumId, { name?, visibility? })`
+  reemplaza al antiguo `rename()` (renombrado porque ahora hace más que
+  renombrar).
+- **Limpieza del `ShareLink` al borrar el álbum**: la spec ofrecía dos
+  caminos igual de válidos (borrar la fila, o dejar que la resolución
+  compruebe la existencia del álbum). Se implementaron **los dos** —ver
+  "Invalidación" arriba— porque el segundo ya estaba pagado (mismo patrón
+  que `SharedViewService` necesita de todos modos para revocación) y el
+  primero evita dejar filas huérfanas acumulándose en el mock in-memory.
+- **`visibility` no gatea el enlace**: explícito en la spec (P5) pero
+  fácil de mal-implementar por accidente — `SharedViewService` no lee
+  `Album.visibility` en absoluto. Cubierto por un test e2e dedicado
+  (`test/shared.e2e-spec.ts`, "works the same for a PUBLIC-visibility
+  album") para dejar constancia de que un `PRIVATE` no bloquea la
+  resolución.
+
+### Tests
+
+- `src/albums/shared/share-links.service.spec.ts` — unit: token opaco +
+  URL con `APP_SHARE_BASE_URL` (y fallback al default de dev), P5 (crear
+  dos veces da el mismo token; revocar+crear da uno nuevo), revocar es
+  idempotente, crear/revocar son owner-only (404 uniforme).
+- `src/albums/shared/shared-view.service.spec.ts` — unit: resolución feliz
+  con el DTO mínimo, solo fotos `available` (P3), aserción explícita de
+  que la respuesta NO contiene `ownerId`/ids de usuario/tokens (P4, por
+  grep del JSON serializado + comparación exacta de claves), 404 uniforme
+  para token inexistente/revocado/álbum eliminado.
+- `src/albums/albums.service.spec.ts` — ampliado: `visibility` default
+  `PRIVATE` y explícito al crear, `update()` cambia nombre y/o visibilidad
+  (owner-only, 404 para ajeno), borrar álbum también limpia su
+  `ShareLink`.
+- `test/albums.e2e-spec.ts` — ampliado: `visibility` en `POST /albums`
+  (default, explícito, 400 con valor inválido), `PATCH /albums/:id` con
+  `visibility` (owner-only, 400 sin `name` ni `visibility`, 400 con valor
+  inválido).
+- `test/shared.e2e-spec.ts` — e2e con 2 usuarios reales (owner, outsider),
+  mismo patrón `beforeAll`/`afterAll` sin `Promise.all`: **`GET
+  /api/v1/shared/:token` funciona sin header `Authorization`** (la prueba
+  central de que es realmente público), P4 (sin `ownerId` ni tokens en la
+  respuesta), P3 (fotos `unavailable` omitidas), 404 uniforme para token
+  inexistente/revocado/álbum eliminado, P5 (crear dos veces da el mismo
+  token; revocar+crear da uno nuevo y el viejo sigue muerto), gestión del
+  enlace y cambio de `visibility` son owner-only (404 para un tercero).
+
+### Env vars nuevas
+
+- `APP_SHARE_BASE_URL` (default `https://memora.app/s/{token}`) — debe
+  contener el placeholder `{token}`; nunca hardcodear el dominio. Mismo
+  patrón que `APP_INVITE_BASE_URL` (spec05).
+
+### Fuera de alcance (explícito, decisión del PO)
+
+UI del visor (web/app); NFC/QR (M8, reutilizará este mismo enlace);
+adopción (M5); que el backend sirva/proxee bytes de imágenes; catálogo o
+descubrimiento público de álbumes (aunque `visibility` ya existe en el
+modelo, preparándolo).
+
+## NFC/QR (spec10-nfc-qr)
+
+Implementa `specs/memora-backend/spec10-nfc-qr.md`: etiquetas físicas
+(NFC) o códigos QR con una URL **estable e irreversible** (D14) que
+resuelven al enlace de compartición (spec09) del álbum, sin depender de
+que ese enlace nunca cambie.
+
+### Por qué el tag no guarda el ShareLink directamente
+
+Un `ShareLink` puede revocarse/regenerarse (su token cambia). Si una
+etiqueta NFC pegada físicamente en un sitio, o un QR ya impreso, tuvieran
+grabado el token del `ShareLink`, regenerar ese enlace **rompería** la
+etiqueta. Por eso `NfcQrTag` se asocia al **álbum**, no al `ShareLink`:
+la resolución es **indirecta** — `tag → albumId → el ShareLink que esté
+activo en ese momento` (`src/albums/nfc-qr/nfc-qr-resolve.service.ts`).
+Revocar y regenerar el `ShareLink` del álbum nunca rompe un tag ya
+grabado — cubierto por un test e2e explícito ("regenerando el ShareLink
+no rompe el tag").
+
+### Endpoints — gestión del tag (autenticado, owner-only)
+
+| Método | Ruta | Qué hace |
+|---|---|---|
+| `POST` | `/api/v1/albums/:albumId/nfc-qr-tags` | Crea **siempre** una fila nueva (`type: 'NFC'\|'QR'` en el body) — token aleatorio, `status: 'enabled'`. Responde `{ id, albumId, type, token, status, url, createdAt, updatedAt }`. |
+| `GET` | `/api/v1/nfc-qr-tags/:id` | Consulta el tag por su **id interno** de Memora. |
+| `PATCH` | `/api/v1/nfc-qr-tags/:id/disable` | Bloqueo soft (P2): marca `disabled`, setea `disabledAt`. Idempotente. **No reactivable** en el MVP (la estructura lo permitiría, no está implementado). |
+
+**Sin restricción de unicidad**, a diferencia de `ShareLink` (uno por
+álbum): cada `POST` crea una fila nueva con su propio `id`/`token`, sin
+importar cuántos tags (del mismo `type` o de otro) ya existan para ese
+álbum — un álbum puede tener varias etiquetas NFC y/o varios QR a la vez.
+
+### Endpoint público — resolución
+
+| Método | Ruta | Qué hace |
+|---|---|---|
+| `GET` | `/api/v1/n/:token` | **PÚBLICO — sin `SessionAuthGuard`, sin sesión.** Busca el tag por su **token opaco** (lo grabado físicamente en el NFC/QR, no el `id` interno). Si el tag existe y está `enabled`, el álbum existe, y el `ShareLink` del álbum existe y está `active` → **redirección HTTP 302** a `GET /api/v1/shared/:shareToken`. En cualquier otro caso → **404 uniforme**, sin distinguir el motivo (mismo criterio P1 de spec09). |
+
+Mismo mecanismo que `SharedController` (spec09) para ser público: este
+backend nunca registra un guard global, así que `NfcQrResolveController`
+simplemente no lleva `@UseGuards(SessionAuthGuard)`. Hereda el contrato
+de error uniforme y `x-request-id` de `configureApp()`.
+
+### Dos desviaciones deliberadas del texto literal de la spec (documentadas, sin impacto de producto)
+
+La propia spec de Kiro tiene dos imprecisiones de redacción en su
+sección normativa (no en sus decisiones P1–P3, que están completas y
+sin ambigüedad); ambas se resolvieron así, sin necesitar una vuelta al
+PO porque el resto del documento ya deja clara la intención real:
+
+1. **Colisión de rutas.** El texto describe el endpoint público con la
+   **misma ruta** que el owner-only de consulta:
+   `GET /api/v1/nfc-qr-tags/:id` aparece dos veces con significados
+   incompatibles (una vez autenticado/por `id`, otra vez público/por
+   `token`). Ambos no pueden coexistir en la misma ruta. Se implementó
+   con dos rutas distintas: `GET /api/v1/nfc-qr-tags/:id` (owner-only,
+   por `id` interno, en `nfc-qr-tag.controller.ts`) y
+   `GET /api/v1/n/:token` (pública, por `token` opaco, en
+   `nfc-qr-resolve.controller.ts`) — que además coincide exactamente con
+   el placeholder de URL que la spec sí deja inequívoco en **P1**:
+   `https://memora.app/n/{token}`.
+2. **Env var de la URL.** P1 dice literalmente "placeholder
+   `APP_SHARE_BASE_URL`" pero le da la forma `/n/{token}` — reusar
+   `APP_SHARE_BASE_URL` (que spec09 ya fijó con forma `/s/{token}`)
+   cambiaría silenciosamente el contrato de spec09. Se usa una env var
+   **propia**, `APP_NFC_QR_BASE_URL` (default
+   `https://memora.app/n/{token}`), mismo patrón que
+   `APP_INVITE_BASE_URL`/`APP_SHARE_BASE_URL`.
+
+Una tercera imprecisión, de redacción únicamente (sin afectar la
+implementación): la spec dice "un tag por tipo por álbum" y en la misma
+frase describe lo contrario ("para múltiples NFC o QR, se crea más de
+una fila con el mismo `type`"). El checklist y el propio `POST`
+("crea una nueva etiqueta", nunca "crea o devuelve la existente") dejan
+claro que la intención real es **sin restricción de unicidad** — así se
+implementó (ver arriba).
+
+Una decisión de implementación adicional, sin ambigüedad de producto de
+por medio: la redirección pública apunta al endpoint **propio** del
+backend (`/api/v1/shared/:shareToken`) en vez del dominio placeholder
+externo `https://memora.app/...` de `APP_SHARE_BASE_URL` — ese dominio
+no existe todavía en el MVP (no hay frontend real), así que redirigir
+ahí no sería verificable end-to-end ni funcional para nadie que probara
+el enlace hoy. Redirigir al propio `/shared/:shareToken` mantiene el
+comportamiento observable ("un 302 al ShareLink activo del álbum")
+siendo además comprobable en los tests e2e.
+
+### Invalidación (D16)
+
+Al eliminar un álbum, `AlbumsService.delete()` ahora también llama a
+`nfcQrTags.deleteAllForAlbum(albumId)` — **hard-delete** (a diferencia
+del soft-delete de `disable()`), tal como pide la spec para este caso.
+Es defensa en profundidad, no el único mecanismo:
+`NfcQrResolveService.resolve()` además comprueba que el álbum siga
+existiendo antes de redirigir a nada.
+
+### Modelo — `src/albums/nfc-qr/`
+
+- **`NfcQrTag`** (`nfc-qr-tag.model.ts`): `{ id, albumId, type:
+  'NFC'|'QR', token, status: 'enabled'|'disabled', createdAt, updatedAt,
+  disabledAt? }`. Token opaco de 256 bits, mismo generador que
+  `ShareLink`/`Invitation` (`randomBytes(32).toString('base64url')`).
+- **`NfcQrTagRepository`** (interfaz + `Symbol` + mock en memoria,
+  `in-memory-nfc-qr-tag.repository.ts`): keyed por `id`, **sin** ninguna
+  clave compuesta por `albumId`+`type` — a propósito, para no imponer la
+  unicidad que la spec no pide.
+- **`NfcQrTagsService`** — gestión owner-only (`create`, `get`,
+  `disable`), vía `AlbumAccessService.requireOwner` (resuelto desde el
+  `albumId` del propio tag para las rutas por `id`).
+- **`NfcQrResolveService`** — resolución pública indirecta (tag →
+  álbum → `ShareLink` activo), devuelve la ruta a redirigir o lanza el
+  404 uniforme.
+
+### Tests
+
+- `src/albums/nfc-qr/nfc-qr-tags.service.spec.ts` — unit: token opaco +
+  `enabled` al crear, URL con `APP_NFC_QR_BASE_URL` (y fallback al
+  default de dev), sin restricción de unicidad (dos tags del mismo tipo
+  coexisten), `get`/`create`/`disable` son owner-only (404), `disable`
+  es idempotente y estampa `disabledAt`.
+- `src/albums/nfc-qr/nfc-qr-resolve.service.spec.ts` — unit: resolución
+  feliz a la ruta interna `/api/v1/shared/:shareToken`, regenerar el
+  `ShareLink` no rompe la resolución (D14), 404 uniforme para token
+  desconocido / tag `disabled` / álbum eliminado (D16) / álbum sin
+  `ShareLink` / `ShareLink` revocado sin regenerar.
+- `test/nfc-qr.e2e-spec.ts` — e2e con 2 usuarios reales (owner,
+  outsider), mismo patrón `beforeAll`/`afterAll`: **`GET /api/v1/n/:token`
+  funciona sin header `Authorization` y responde 302** con `Location`
+  exacto (la prueba central de que es realmente público); gestión
+  (crear/consultar/bloquear) es owner-only; 400 para un `type` inválido;
+  D14 (regenerar el ShareLink no rompe el tag); 404 uniforme para token
+  desconocido, tag bloqueado, y álbum eliminado (verificando además que
+  la consulta owner-only del tag también da 404 tras el hard-delete).
+
+### Env vars nuevas
+
+- `APP_NFC_QR_BASE_URL` (default `https://memora.app/n/{token}`) — debe
+  contener el placeholder `{token}`; nunca hardcodear el dominio. Variable
+  propia, no reutiliza `APP_SHARE_BASE_URL` (ver "desviaciones" arriba).
+
+### Fuera de alcance (explícito, decisión del PO)
+
+Generación real de imágenes QR o escritura NFC real (es responsabilidad
+del cliente app/web); reactivación de un tag `disabled` (la estructura
+lo permite, no se implementa en el MVP); cualquier UI.
 
 ## Desarrollo
 

@@ -21,7 +21,7 @@ Checklist funcional del MVP, agrupado por módulos. Cada ítem está redactado c
 - ✅ A1.2 Cuenta Memora ligada a identidad Google.
 - ✅ A1.3 Autorizar Drive (scope `drive.file`).
 - ✅ A1.4 Cerrar sesión.
-- 🟡 A1.5 Sesión expirada: la app renueva el acceso automáticamente (refresh del JWT). *(backend listo; falta en app)*
+- 🟡 A1.5 Sesión expirada: la app renueva el acceso automáticamente (refresh del JWT). *(backend ✅ completo: `/auth/refresh`+`logout` spec02, `SessionRegistry` tras interfaz spec11; falta el refresco automático en la app)*
 - ⬜ A1.6 Autorización de Drive revocada: al operar contra Drive, se pide re-autorizar sin perder la cuenta (D10).
 
 ## M2 — Biblioteca personal y álbumes
@@ -72,10 +72,10 @@ Checklist funcional del MVP, agrupado por módulos. Cada ítem está redactado c
 - ⬜ V7.4 La gestión/modificación del álbum requiere autenticación.
 
 ## M8 — NFC y QR
-- ⬜ N8.1 Asociar un NFC a un álbum ya creado; el NFC contiene la URL estable `https://memora.app/n/{identifier}` (D14).
-- ⬜ N8.2 Asociar un QR al mismo álbum; QR y NFC llevan al mismo álbum.
-- ⬜ N8.3 Memora resuelve el identificador → álbum (nunca apunta directo a Drive; identificador no revela info sensible).
-- ⬜ N8.4 Posibilidad de bloquear el NFC tras programarlo.
+- 🟡 N8.1 Asociar un NFC a un álbum ya creado; el NFC contiene la URL estable con token opaco (D14). *(backend ✅ spec10; falta UI app para grabar la etiqueta)*
+- 🟡 N8.2 Asociar un QR al mismo álbum; QR y NFC llevan al mismo álbum. *(backend ✅ spec10: varios tags por álbum; falta UI app)*
+- ✅ N8.3 Memora resuelve el identificador → álbum vía redirección al ShareLink (nunca apunta directo a Drive; token opaco no revela info sensible). *(backend spec10)*
+- ✅ N8.4 Posibilidad de bloquear el NFC tras programarlo (soft-delete `disable`). *(backend spec10)*
 
 ## M9 — Plataformas
 - ⬜ X9.1 App Flutter: captura + gestión completa (login, Drive, álbumes, fotos, compartir, colaboradores, NFC/QR) (D7).

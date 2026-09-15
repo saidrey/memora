@@ -48,6 +48,10 @@ User
 - **D14 — NFC/QR (opción A).** El usuario crea el álbum y luego le asocia NFC y/o QR. Sin etiquetas pre-fabricadas/no reclamadas ni marketplace en el MVP. Resuelven vía URL estable de Memora.
 - **D15 — Optimización automática (opción A).** Optimización automática con buenos defaults; el usuario no elige calidad/resolución. Parámetros técnicos definidos por Tech Lead (equilibrio calidad/tamaño/velocidad/almacenamiento/UX).
 - **D16 — Eliminar un álbum.** Elimina el álbum y sus relaciones foto↔álbum. **No** borra fotos de ningún Drive, ni de colaboradores, ni de la Biblioteca personal del usuario. Una foto en otros álbumes sigue en ellos. Una copia "Guardada en mi biblioteca" persiste. Resumen: **eliminar un álbum elimina la agrupación, no las fotografías.**
+- **D17 — Visibilidad del álbum (`PRIVATE` | `PUBLIC`, KISS).** Cada álbum tiene una propiedad `visibility` con default **`PRIVATE`**. Se puede fijar opcionalmente **al crear** el álbum y cambiarse después con `PATCH /albums/:id`, **solo por el owner**.
+  - **PRIVATE:** álbumes personales/familiares. No son públicamente descubribles. El owner controla quién colabora. Puede existir un enlace de visualización para compartirlo con personas concretas; el enlace **no** convierte el álbum en descubrible.
+  - **PUBLIC:** álbumes destinados a verse públicamente (negocio, restaurante, atractivo turístico, evento). Cualquiera con acceso al álbum puede visualizarlo sin login; no aplican las mismas restricciones conceptuales de privacidad de un álbum familiar.
+  - **Alcance MVP (KISS):** solo la propiedad `visibility`. **NO** se implementa catálogo público, búsqueda/descubrimiento de álbumes, perfiles públicos, SEO ni similares (a evaluar más adelante). En el MVP, tanto PRIVATE como PUBLIC se visualizan por el **mismo mecanismo de enlace de compartición** (token opaco); `visibility` marca la intención de producto y prepara la evolución futura sin habilitar descubrimiento ahora.
 
 ## Precisiones adicionales (aprobadas)
 

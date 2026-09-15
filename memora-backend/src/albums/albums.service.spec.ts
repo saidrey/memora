@@ -5,12 +5,16 @@ import { InMemoryPhotoRepository } from './photos/in-memory-photo.repository';
 import { AlbumAccessService } from './collaborators/album-access.service';
 import { InMemoryMembershipRepository } from './collaborators/in-memory-membership.repository';
 import { InMemoryInvitationRepository } from './collaborators/in-memory-invitation.repository';
+import { InMemoryShareLinkRepository } from './shared/in-memory-share-link.repository';
+import { InMemoryNfcQrTagRepository } from './nfc-qr/in-memory-nfc-qr-tag.repository';
 
 function buildService() {
   const albumRepository = new InMemoryAlbumRepository();
   const photoRepository = new InMemoryPhotoRepository();
   const membershipRepository = new InMemoryMembershipRepository();
   const invitationRepository = new InMemoryInvitationRepository();
+  const shareLinkRepository = new InMemoryShareLinkRepository();
+  const nfcQrTagRepository = new InMemoryNfcQrTagRepository();
   const albumAccess = new AlbumAccessService(
     albumRepository,
     membershipRepository,
@@ -20,6 +24,8 @@ function buildService() {
     photoRepository,
     membershipRepository,
     invitationRepository,
+    shareLinkRepository,
+    nfcQrTagRepository,
     albumAccess,
   );
   return {
@@ -28,6 +34,8 @@ function buildService() {
     photoRepository,
     membershipRepository,
     invitationRepository,
+    shareLinkRepository,
+    nfcQrTagRepository,
   };
 }
 
@@ -43,10 +51,19 @@ describe('AlbumsService', () => {
     expect(album).toEqual({
       id: expect.any(String),
       name: 'Vacaciones',
+      visibility: 'PRIVATE',
       photoCount: 0,
       createdAt: expect.any(Date),
       updatedAt: expect.any(Date),
     });
+  });
+
+  it('creates an album with an explicit visibility (D17)', async () => {
+    const { service } = buildService();
+
+    const album = await service.create(OWNER, 'Público', 'PUBLIC');
+
+    expect(album.visibility).toBe('PUBLIC');
   });
 
   it('lists only the caller´s own albums, with role "owner"', async () => {
@@ -76,7 +93,9 @@ describe('AlbumsService', () => {
     const { service } = buildService();
     const created = await service.create(OWNER, 'Nombre viejo');
 
-    const renamed = await service.rename(OWNER, created.id, 'Nombre nuevo');
+    const renamed = await service.update(OWNER, created.id, {
+      name: 'Nombre nuevo',
+    });
 
     expect(renamed.name).toBe('Nombre nuevo');
   });
@@ -89,7 +108,7 @@ describe('AlbumsService', () => {
     );
   });
 
-  it('returns 404 (not 403) for someone else´s album, to a get/rename/delete alike', async () => {
+  it('returns 404 (not 403) for someone else´s album, to a get/update/delete alike', async () => {
     const { service } = buildService();
     const theirs = await service.create(OTHER_USER, 'No es tuyo');
 
@@ -97,11 +116,48 @@ describe('AlbumsService', () => {
       NotFoundException,
     );
     await expect(
-      service.rename(OWNER, theirs.id, 'Intento de renombrar'),
+      service.update(OWNER, theirs.id, { name: 'Intento de renombrar' }),
     ).rejects.toThrow(NotFoundException);
     await expect(service.delete(OWNER, theirs.id)).rejects.toThrow(
       NotFoundException,
     );
+  });
+
+  // --- spec09-compartir-visor.md: visibility (D17) ---
+
+  it('changes visibility for the owner via update()', async () => {
+    const { service } = buildService();
+    const created = await service.create(OWNER, 'X');
+    expect(created.visibility).toBe('PRIVATE');
+
+    const updated = await service.update(OWNER, created.id, {
+      visibility: 'PUBLIC',
+    });
+
+    expect(updated.visibility).toBe('PUBLIC');
+    expect(updated.name).toBe('X'); // untouched when not sent
+  });
+
+  it('a non-owner cannot change visibility either (uniform 404)', async () => {
+    const { service } = buildService();
+    const theirs = await service.create(OTHER_USER, 'No es tuyo');
+
+    await expect(
+      service.update(OWNER, theirs.id, { visibility: 'PUBLIC' }),
+    ).rejects.toThrow(NotFoundException);
+  });
+
+  it('update() can change name and visibility together in one call', async () => {
+    const { service } = buildService();
+    const created = await service.create(OWNER, 'Antes');
+
+    const updated = await service.update(OWNER, created.id, {
+      name: 'Después',
+      visibility: 'PUBLIC',
+    });
+
+    expect(updated.name).toBe('Después');
+    expect(updated.visibility).toBe('PUBLIC');
   });
 
   it('deleting an album removes only ITS photo relations — a photo in two albums stays in the other (D16)', async () => {
@@ -194,5 +250,29 @@ describe('AlbumsService', () => {
 
     expect(await membershipRepository.listCollaborators(album.id)).toEqual([]);
     expect(await invitationRepository.listByAlbum(album.id)).toEqual([]);
+  });
+
+  it('deleting an album also removes its share link (spec09)', async () => {
+    const { service, shareLinkRepository } = buildService();
+    const album = await service.create(OWNER, 'A borrar');
+    await shareLinkRepository.create({ albumId: album.id, token: 'tok-1' });
+
+    await service.delete(OWNER, album.id);
+
+    expect(await shareLinkRepository.findByAlbumId(album.id)).toBeNull();
+  });
+
+  it('deleting an album also hard-deletes its NFC/QR tags (spec10, D16)', async () => {
+    const { service, nfcQrTagRepository } = buildService();
+    const album = await service.create(OWNER, 'A borrar');
+    const tag = await nfcQrTagRepository.create({
+      albumId: album.id,
+      type: 'NFC',
+      token: 'nfc-tok-1',
+    });
+
+    await service.delete(OWNER, album.id);
+
+    expect(await nfcQrTagRepository.findById(tag.id)).toBeNull();
   });
 });

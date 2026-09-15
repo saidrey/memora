@@ -39,15 +39,20 @@ Completado y validado PASS:
 - **M4 backend** Colaboradores (`spec05`) — invitación por enlace un solo uso (D12/D13), aceptar, roles Owner/Collaborator (D1), aporte multi-Drive, administrar/quitar/abandonar (D5), D16. PASS 2026-09-14 (70 unit + 67 e2e).
 - **M6 backend** Disponibilidad (`spec07`) — verificación perezosa (D9): cliente verifica → backend persiste; reporte individual + batch owner-only, recuperación, `availabilityCheckedAt`, expuesto sin filtrar en álbum/biblioteca. PASS 2026-09-14 (78 unit + 77 e2e).
 - **Abstracción de almacenamiento** (`spec08`) — `PhotoStorage` (interfaz + token) con `GoogleDrivePhotoStorage`; `Photo.driveFileId` → `storageRef {provider, fileId}`; ops no soportadas → 501 `STORAGE_OPERATION_UNSUPPORTED`; test de neutralidad de dominio. No migra nada. PASS 2026-09-14 (89 unit + 77 e2e).
+- **M7 backend** Compartir/visor (`spec09`) — `Album.visibility` (`PRIVATE`|`PUBLIC`, default `PRIVATE`, D17), enlace estable (uno por álbum, P5), endpoint público `GET /shared/:token` (sin guard: solo fotos disponibles, superficie sin PII, 404 uniforme), test de neutralidad. PASS 2026-09-14 (107 unit + 99 e2e).
+- **M8 backend** NFC/QR (`spec10`) — entidad `NfcQrTag` (token opaco 256-bit, soft-delete), endpoints owner-only crear/disable/consultar, endpoint público `GET /n/:token` (sin guard) → redirección 302 al ShareLink activo (resolución indirecta tag→álbum→ShareLink, D14), 404 uniforme. PASS WITH NOTES 2026-09-14 (124 unit + 116 e2e). Notas: rutas separadas por colisión, env var propia, 302 a endpoint interno (deuda menor: en prod debe ir a URL frontend).
+- **A1.5 deuda backend** (`spec11`) — `SessionRegistry` elevado a interfaz + token `SESSION_REGISTRY` + `InMemorySessionRegistry`; sin cambio de comportamiento (logout sigue revocando). PASS 2026-09-14 (124 unit + 116 e2e, mismos conteos). **Cierra FASE 1 (backend).**
 
 **Diferido (fuera del MVP hasta nueva decisión):**
 - **M5 — Adoptar** ("Guardar en mi biblioteca", D6): ⏸️ diferido a post-MVP (2026-09-14). Confirmado en `spec06-adoptar.md` que la copia cross-Drive no es viable de forma transparente con `drive.file` sin romper decisiones técnicas. En el MVP las fotos de colaboradores se ven mientras estén disponibles en su Drive (D5+D9); no hay copia.
 
-Pendiente (orden de backend acordado):
-1. **M7 — Compartir/visor** (siguiente): enlace estable, acceso sin login D2 + resolución.
-2. **M8 — NFC/QR** (asociar a álbum ya creado D14, URL estable, resolución).
-3. **A1.5 — Refresh de sesión** (deuda: backend+app).
-Después: app (M3 app: seleccionar/optimizar/subir; UI de álbumes; etc.) y web.
+**✅ FASE 1 (BACKEND) CERRADA** (2026-09-14): todos los ítems no diferidos del backend están PASS; M5 ⏸️ diferida a post-MVP.
+
+Siguiente (FASE 2 — app, arranca cuando el PO lo indique):
+1. **M3 app** — seleccionar fotos, optimizar (D15), subir bytes directo a Drive con `drive-token`.
+2. UI de álbumes / colaboradores (consume M2/M3/M4 backend).
+3. A1.5 (parte app): refresco automático del JWT + A1.6 re-autorización de Drive (D10).
+Después: web (en pausa).
 
 ## Convenciones de validación (para optimizar tokens)
 - Validación quirúrgica: correr `npm run build` + tests + grep dirigido a los criterios críticos; lectura profunda de código solo si un test falla o la spec es sensible (auth, borrados, adopción).
@@ -56,5 +61,5 @@ Después: app (M3 app: seleccionar/optimizar/subir; UI de álbumes; etc.) y web.
 
 ## Deuda técnica conocida (no bloqueante)
 - Flake residual de e2e (supertest + apps Nest efímeras); `auth.e2e` sin migrar a beforeAll a propósito (muta sesión).
-- `SessionRegistry` es provider en memoria; elevar a interfaz antes de desplegar.
+- ~~`SessionRegistry` es provider en memoria; elevar a interfaz antes de desplegar.~~ ✅ Resuelto (spec11: ahora es interfaz + `InMemorySessionRegistry`; falta el adaptador a datastore real, p. ej. Redis/Postgres, antes de desplegar).
 - Cifrado real del refresh token en `TokenStore` (hoy frontera documentada).

@@ -2,7 +2,7 @@
 
 > **Qué es este documento.** Un **mapa con punteros** para que Kiro (o un agente con rol Tech Lead) arranque en frío leyendo **un solo archivo** en vez de releer todo. **NO es un resumen que reemplace las fuentes de verdad.** Es un índice: dice *qué existe y dónde está la verdad completa*.
 >
-> **Regla de precedencia (crítica, no negociable).** Ante cualquier duda de **producto**, la fuente de verdad es **`producto-mvp.md`** (decisiones D1–D16), nunca este mapa. Ante cualquier duda de **estado**, la fuente es **`ESTADO.md`** y las specs con su sello de validación. Ante cualquier duda de **convenciones**, la fuente es **`README.md`** (raíz) y **`specs/README.md`**. Si este mapa y una fuente se contradicen, **gana la fuente**; corrige este mapa.
+> **Regla de precedencia (crítica, no negociable).** Ante cualquier duda de **producto**, la fuente de verdad es **`producto-mvp.md`** (decisiones D1–D17), nunca este mapa. Ante cualquier duda de **estado**, la fuente es **`ESTADO.md`** y las specs con su sello de validación. Ante cualquier duda de **convenciones**, la fuente es **`README.md`** (raíz) y **`specs/README.md`**. Si este mapa y una fuente se contradicen, **gana la fuente**; corrige este mapa.
 >
 > **Este documento no cierra decisiones ni inventa reglas.** Solo apunta a dónde están.
 
@@ -20,7 +20,7 @@
 
 ## 1. Roles y ciclo de trabajo
 
-- **Founder/PO** (el usuario): decide producto y reglas de negocio. Única autoridad sobre D1–D16.
+- **Founder/PO** (el usuario): decide producto y reglas de negocio. Única autoridad sobre D1–D17.
 - **Kiro (Tech Lead):** especifica, valida contra criterios, **no inventa reglas de producto**. Si falta una decisión, la pregunta con **opciones + recomendación + impacto**.
 - **Claude:** implementa según specs y reporta. No redefine producto.
 - **Ciclo:** Kiro escribe spec → PO aprueba (incl. decisiones abiertas) → Kiro entrega prompt a Claude → Claude implementa → Kiro valida (**PASS / PASS WITH NOTES / CHANGES REQUIRED**).
@@ -40,7 +40,7 @@
 
 ---
 
-## 3. Índice de decisiones de producto D1–D16 (punteros, NO el texto)
+## 3. Índice de decisiones de producto D1–D17 (punteros, NO el texto)
 
 Cada línea es un recordatorio de una línea. **El texto vinculante está en `producto-mvp.md`.** Ante cualquier matiz, lee ahí.
 
@@ -62,6 +62,7 @@ Cada línea es un recordatorio de una línea. **El texto vinculante está en `pr
 | D14 | NFC/QR: se asocian a un álbum ya creado; resuelven vía URL estable de Memora. |
 | D15 | Optimización automática con buenos defaults; el usuario no elige calidad/resolución. |
 | D16 | Eliminar álbum = eliminar la agrupación y relaciones, **no** las fotografías. |
+| D17 | Visibilidad del álbum `PRIVATE`/`PUBLIC` (default PRIVATE), fijable al crear y por PATCH (owner). KISS: sin catálogo/descubrimiento; ambos se ven por enlace de compartición. |
 
 > Precisiones adicionales aprobadas (estructura de Drive organizativa, viabilidad de M5, web parte del MVP) también en `producto-mvp.md` §Precisiones.
 
@@ -71,7 +72,7 @@ Cada línea es un recordatorio de una línea. **El texto vinculante está en `pr
 
 **PASS (validado):** Fundación monorepo + contrato API · Auth Google backend (login real en Android) · App fundación + login · Web fundación (en pausa de prioridad) · **M2** álbumes (spec03) · **M3 backend** fotos (spec04) · **M4 backend** colaboradores (spec05) · **M6 backend** disponibilidad (spec07) · **Abstracción `PhotoStorage`** (spec08). Últimos tres PASS 2026-09-14.
 
-**Orden pendiente de backend:** **M7 Visor** (siguiente) → M8 NFC/QR → A1.5 refresh de sesión. Luego app y web. **M5 Adoptar: ⏸️ diferido a post-MVP** (copia cross-Drive no viable con `drive.file`; las fotos de colaboradores se ven mientras estén disponibles en su Drive).
+**✅ FASE 1 (backend) CERRADA** (2026-09-14): M2, M3, M4, M6, abstracción `PhotoStorage`, M7 (visor), M8 (NFC/QR) y A1.5 deuda (`SessionRegistry` tras interfaz) todos PASS. **M5 Adoptar: ⏸️ diferido a post-MVP** (copia cross-Drive no viable con `drive.file`). **Siguiente: FASE 2 (app)** cuando el PO lo indique — M3 app (seleccionar/optimizar/subir con `drive-token`), UI de álbumes/colaboradores, A1.5+A1.6 en app.
 
 > Estado detallado y deuda técnica: `ESTADO.md`. Estado por ítem verificable: `backlog-mvp.md`.
 
@@ -93,6 +94,9 @@ Numeración **independiente por carpeta**. Estados los asigna Kiro.
 - `spec06-adoptar.md` — ⏸️ DIFERIDA a post-MVP (M5; análisis técnico conservado).
 - `spec07-disponibilidad.md` — PASS (M6 backend).
 - `spec08-abstraccion-almacenamiento.md` — PASS (abstracción `PhotoStorage`; `Photo.driveFileId` → `Photo.storageRef {provider, fileId}`).
+- `spec09-compartir-visor.md` — PASS (enlace de compartición público `GET /shared/:token`, `visibility` del álbum D17).
+- `spec10-nfc-qr.md` — PASS WITH NOTES (M8: `NfcQrTag` token opaco 256-bit + soft-delete; owner-only crear/disable/consultar `GET /nfc-qr-tags/:id`; público `GET /n/:token` → 302 al ShareLink activo, resolución indirecta, 404 uniforme; env `APP_NFC_QR_BASE_URL`).
+- `spec11-session-registry-interface.md` — PASS (deuda A1.5 backend: `SessionRegistry` → interfaz + token `SESSION_REGISTRY` + `InMemorySessionRegistry`; sin cambio de comportamiento). **Cierra FASE 1 backend.**
 
 **`specs/memora-app/`**
 - `spec01-fundacion-app.md`, `spec02-login-google.md`.
@@ -129,7 +133,7 @@ Raíz del backend: `memora-backend/`. NestJS 10 + TypeScript, Express. **Todos l
 **Relación N:M foto↔álbum:** vive en el **AlbumRepository** (`InMemoryAlbumRepository.photoIdsByAlbumId: Map<albumId, Set<photoId>>`), no en Photo ni Album. Idempotente (Set). Borrar álbum limpia solo sus relaciones (D16); borrar foto llama `removePhotoFromAllAlbums` antes de `photos.delete`. La pertenencia de fotos es del lado álbum → las reglas de colaboración giran en torno al álbum.
 
 **Entidades clave:**
-- `Album` (`src/albums/album.model.ts`): `{ id, ownerId, name, createdAt, updatedAt }`. **Sin colaboradores aún** (los añade M4).
+- `Album` (`src/albums/album.model.ts`): `{ id, ownerId, name, createdAt, updatedAt, visibility 'PRIVATE'|'PUBLIC'` default `PRIVATE`}. Colaboradores viven en membership (M4), no en Album (D1, D17).
 - `Photo` (`src/albums/photos/photo.model.ts`): `{ id, ownerId, storageRef, createdAt, capturedAt?, width?, height?, mimeType?, sizeBytes?, availability, availabilityCheckedAt? }`. `storageRef = { provider: 'google-drive', fileId }` (spec08, referencia neutral; el dominio NO usa `driveFileId` ni menciona "Drive"). `availability` default `'available'`.
 
 **Abstracción de almacenamiento (spec08):** interfaz `PhotoStorage` (token `PHOTO_STORAGE`) en `src/albums/photos/storage/`, con `GoogleDrivePhotoStorage` (única impl, envuelve `AuthService.getDriveAccessToken`). Ops del MVP: `getUploadAuthorization`, `getReadReference`. Ops declaradas no soportadas (`describe/exists/download/stream/copy/delete`) → 501 `STORAGE_OPERATION_UNSUPPORTED`. Regla normativa: el dominio no referencia "Drive" ni `driveFileId` (verificado por `domain-storage-neutrality.spec.ts`). Para operar sobre el archivo, usar `PhotoStorage`; para referenciarlo, `Photo.storageRef`.
@@ -141,6 +145,8 @@ Raíz del backend: `memora-backend/`. NestJS 10 + TypeScript, Express. **Todos l
 - Albums: `POST /albums`, `GET /albums`, `GET /albums/:id`, `PATCH /albums/:id`, `DELETE /albums/:id` (204), `POST /albums/:albumId/photos`, `DELETE /albums/:albumId/photos/:photoId`.
 - Photos: `POST /photos`, `DELETE /photos/:photoId` (204).
 - Library: `GET /library`.
+- Compartir (M7): `POST /albums/:albumId/share-link`, `DELETE /albums/:albumId/share-link`; **público sin guard** `GET /shared/:token`.
+- NFC/QR (M8): `POST /albums/:albumId/nfc-qr-tags`, `PATCH /nfc-qr-tags/:id/disable` (204), `GET /nfc-qr-tags/:id`; **público sin guard** `GET /n/:token` (redirección 302). Los **dos** controllers públicos del backend son `SharedController` y `NfcQrResolveController` (no llevan `@UseGuards`).
 
 ---
 
@@ -167,7 +173,7 @@ Raíz del backend: `memora-backend/`. NestJS 10 + TypeScript, Express. **Todos l
 
 ## 9. Memoria de Claude (Engram) — nota informativa
 
-Claude Code usa **Engram** (memoria persistente, plugin de Claude Code, DB en `~/.engram/`) en este repo. Guarda el **diario de implementación de Claude** (qué implementó, resultados de build/tests, gotchas), organizado en el proyecto `memora`. **No** contiene las decisiones de producto D1–D16 (esas viven solo en `producto-mvp.md`). Kiro no se engancha a Engram; para Kiro la fuente de verdad son los archivos del repo. Al preparar prompts para Claude, se puede pedirle que consulte/guarde en Engram, pero **no sustituye** las specs ni este mapa.
+Claude Code usa **Engram** (memoria persistente, plugin de Claude Code, DB en `~/.engram/`) en este repo. Guarda el **diario de implementación de Claude** (qué implementó, resultados de build/tests, gotchas), organizado en el proyecto `memora`. **No** contiene las decisiones de producto D1–D17 (esas viven solo en `producto-mvp.md`). Kiro no se engancha a Engram; para Kiro la fuente de verdad son los archivos del repo. Al preparar prompts para Claude, se puede pedirle que consulte/guarde en Engram, pero **no sustituye** las specs ni este mapa.
 
 ---
 

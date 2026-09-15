@@ -66,6 +66,9 @@ Cada archivo `specNN-<nombre>.md` contiene:
 - `spec06-adoptar.md` — "Guardar en mi biblioteca" / copia de foto de colaborador (M5 backend). Estado: ⏸️ DIFERIDA A POST-MVP (no viable de forma transparente con `drive.file`; decisión del PO). Conserva el análisis técnico.
 - `spec07-disponibilidad.md` — disponibilidad perezosa de fotos en Drive (M6 backend); cliente verifica → backend persiste. Estado: PASS.
 - `spec08-abstraccion-almacenamiento.md` — abstracción `PhotoStorage` + referencia neutral `storageRef` (Drive detrás de interfaz; habilitador de storage futuro/M5). Estado: PASS.
+- `spec09-compartir-visor.md` — enlace estable de compartición (solo lectura, sin login D2), resolución pública y `visibility` del álbum (D17) (M7 backend). Estado: APROBADA, lista para implementar.
+- `spec10-nfc-qr.md` — asociar etiquetas NFC/QR a álbumes, URL estable (token opaco), redirección 302 al ShareLink (M8 backend). Estado: PASS WITH NOTES.
+- `spec11-session-registry-interface.md` — deuda técnica de auth (A1.5 backend): eleva `SessionRegistry` a interfaz + mock en memoria (patrón del resto del backend), sin cambiar comportamiento. Cierra FASE 1. Estado: APROBADA, lista para implementar.
 
 ### memora-web/
 - `spec01-fundacion-web.md` — esqueleto Next.js y capa de acceso a la API.

@@ -20,11 +20,11 @@
 | 6 | M5 Adoptar / "Guardar en mi biblioteca" | `memora-backend/spec06-adoptar.md` | ⏸️ DIFERIDA A POST-MVP (no viable de forma transparente con `drive.file`; decisión del PO 2026-09-14) |
 | 7 | **M6 Disponibilidad de archivos (Drive)** | `memora-backend/spec07-disponibilidad.md` | ✅ PASS |
 | 8 | **Abstracción de almacenamiento (`PhotoStorage`)** | `memora-backend/spec08-abstraccion-almacenamiento.md` | ✅ PASS |
-| 9 | M7 Compartir / Visor (parte backend: enlace estable + resolución) | `memora-backend/spec09-*` (por crear) | ⬜ PENDIENTE |
-| 10 | M8 NFC/QR (parte backend: asociar + resolución) | `memora-backend/spec10-*` (por crear) | ⬜ PENDIENTE |
-| 11 | A1.5 Refresh de sesión (deuda backend) | `memora-backend/spec11-*` (por crear) | ⬜ PENDIENTE |
+| 9 | **M7 Compartir / Visor** | `memora-backend/spec09-compartir-visor.md` | ✅ PASS |
+| 10 | **M8 NFC/QR** (parte backend: asociar + resolución) | `memora-backend/spec10-nfc-qr.md` | ✅ PASS (with notes) |
+| 11 | A1.5 deuda backend: `SessionRegistry` → interfaz + mock | `memora-backend/spec11-session-registry-interface.md` | ✅ PASS |
 
-**➡️ SIGUIENTE:** ítem #9 — **M7 Compartir / Visor** (backend: enlace estable + resolución). (M4, M6 y la abstracción `PhotoStorage` ✅ PASS; M5 ⏸️ diferida a post-MVP.)
+**✅ FASE 1 (BACKEND) CERRADA** (2026-09-14). Todos los ítems no diferidos están PASS; M5 ⏸️ diferida a post-MVP. **➡️ SIGUIENTE:** FASE 2 (app), que arranca cuando el PO lo indique — ítem **A** (M3 app: seleccionar/optimizar/subir fotos con `drive-token`).
 
 > Cuando **todos** los ítems no diferidos de FASE 1 estén ✅ PASS, el PO decide pasar a FASE 2. M5 queda fuera del alcance del MVP hasta nueva decisión.
 

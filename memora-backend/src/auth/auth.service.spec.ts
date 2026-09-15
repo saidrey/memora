@@ -4,7 +4,7 @@ import { AuthService } from './auth.service';
 import { GoogleAuthClient } from './google-auth/google-auth-client.interface';
 import { InMemoryUserRepository } from './users/in-memory-user.repository';
 import { InMemoryTokenStore } from './tokens/in-memory-token.store';
-import { SessionRegistry } from './session/session-registry';
+import { InMemorySessionRegistry } from './session/in-memory-session-registry';
 import { SessionTokenService } from './session/session-token.service';
 import { ApiException } from '../common/exceptions/api.exception';
 
@@ -44,7 +44,7 @@ function buildAuthService(googleAuthClient: GoogleAuthClient) {
   );
   const userRepository = new InMemoryUserRepository();
   const tokenStore = new InMemoryTokenStore();
-  const sessionRegistry = new SessionRegistry();
+  const sessionRegistry = new InMemorySessionRegistry();
 
   const authService = new AuthService(
     googleAuthClient,

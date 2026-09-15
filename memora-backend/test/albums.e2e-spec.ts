@@ -110,10 +110,32 @@ describe('Albums (e2e)', () => {
       expect(response.body).toEqual({
         id: expect.any(String),
         name,
+        visibility: 'PRIVATE',
         photoCount: 0,
         createdAt: expect.any(String),
         updatedAt: expect.any(String),
       });
+    });
+
+    it('accepts an explicit visibility (D17)', async () => {
+      const name = uniqueName('Público');
+      const response = await request(app.getHttpServer())
+        .post('/api/v1/albums')
+        .set('Authorization', authed(tokenA))
+        .send({ name, visibility: 'PUBLIC' });
+
+      expect(response.status).toBe(201);
+      expect(response.body.visibility).toBe('PUBLIC');
+    });
+
+    it('rejects an invalid visibility with a uniform 400', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/api/v1/albums')
+        .set('Authorization', authed(tokenA))
+        .send({ name: uniqueName('X'), visibility: 'NOT_A_VALUE' });
+
+      expect(response.status).toBe(400);
+      expect(response.body.code).toBe('INVALID_REQUEST');
     });
 
     it('rejects an empty name with a uniform 400', async () => {
@@ -238,6 +260,66 @@ describe('Albums (e2e)', () => {
 
       expect(response.status).toBe(404);
       expect(response.body.code).toBe('NOT_FOUND');
+    });
+
+    it('changes visibility for its owner (D17)', async () => {
+      const created = await request(app.getHttpServer())
+        .post('/api/v1/albums')
+        .set('Authorization', authed(tokenA))
+        .send({ name: uniqueName('X') });
+      expect(created.body.visibility).toBe('PRIVATE');
+
+      const response = await request(app.getHttpServer())
+        .patch(`/api/v1/albums/${created.body.id}`)
+        .set('Authorization', authed(tokenA))
+        .send({ visibility: 'PUBLIC' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.visibility).toBe('PUBLIC');
+    });
+
+    it('a non-owner cannot change visibility either (uniform 404)', async () => {
+      const created = await request(app.getHttpServer())
+        .post('/api/v1/albums')
+        .set('Authorization', authed(tokenA))
+        .send({ name: uniqueName('X') });
+
+      const response = await request(app.getHttpServer())
+        .patch(`/api/v1/albums/${created.body.id}`)
+        .set('Authorization', authed(tokenB))
+        .send({ visibility: 'PUBLIC' });
+
+      expect(response.status).toBe(404);
+    });
+
+    it('rejects a body with neither name nor visibility (uniform 400)', async () => {
+      const created = await request(app.getHttpServer())
+        .post('/api/v1/albums')
+        .set('Authorization', authed(tokenA))
+        .send({ name: uniqueName('X') });
+
+      const response = await request(app.getHttpServer())
+        .patch(`/api/v1/albums/${created.body.id}`)
+        .set('Authorization', authed(tokenA))
+        .send({});
+
+      expect(response.status).toBe(400);
+      expect(response.body.code).toBe('INVALID_REQUEST');
+    });
+
+    it('rejects an invalid visibility value (uniform 400)', async () => {
+      const created = await request(app.getHttpServer())
+        .post('/api/v1/albums')
+        .set('Authorization', authed(tokenA))
+        .send({ name: uniqueName('X') });
+
+      const response = await request(app.getHttpServer())
+        .patch(`/api/v1/albums/${created.body.id}`)
+        .set('Authorization', authed(tokenA))
+        .send({ visibility: 'nope' });
+
+      expect(response.status).toBe(400);
+      expect(response.body.code).toBe('INVALID_REQUEST');
     });
   });
 
