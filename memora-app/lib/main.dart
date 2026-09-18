@@ -12,6 +12,7 @@ import 'auth/auth_api.dart';
 import 'auth/auth_controller.dart';
 import 'auth/google_auth_service.dart';
 import 'auth/session_storage.dart';
+import 'design/memora_theme.dart';
 import 'photos/drive_token_api.dart';
 import 'photos/drive_upload_service.dart';
 import 'photos/photo_optimizer.dart';
@@ -86,6 +87,7 @@ class MemoraApp extends StatelessWidget {
 
     return MaterialApp(
       title: 'Memora',
+      theme: MemoraTheme.theme,
       home: HomeScreen(
         healthApi: HealthApi(apiClient),
         authController: authController,

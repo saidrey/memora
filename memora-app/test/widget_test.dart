@@ -76,30 +76,30 @@ PhotoUploadController _photoUploadController(ApiClient apiClient) {
 }
 
 void main() {
-  testWidgets(
-    'shows the login button and backend status when unauthenticated',
-    (tester) async {
-      final apiClient = _healthyApiClient();
-      final auth = _authController(apiClient)
-        ..status = AuthStatus.unauthenticated;
+  testWidgets('shows the Google login composition when unauthenticated', (
+    tester,
+  ) async {
+    final apiClient = _healthyApiClient();
+    final auth = _authController(apiClient)
+      ..status = AuthStatus.unauthenticated;
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: HomeScreen(
-            healthApi: HealthApi(apiClient),
-            authController: auth,
-            photoUploadController: _photoUploadController(apiClient),
-            albumsController: _albumsController(apiClient),
-            driveThumbnailService: _driveThumbnailService(apiClient),
-          ),
+    await tester.pumpWidget(
+      MaterialApp(
+        home: HomeScreen(
+          healthApi: HealthApi(apiClient),
+          authController: auth,
+          photoUploadController: _photoUploadController(apiClient),
+          albumsController: _albumsController(apiClient),
+          driveThumbnailService: _driveThumbnailService(apiClient),
         ),
-      );
-      await tester.pumpAndSettle();
+      ),
+    );
+    await tester.pumpAndSettle();
 
-      expect(find.text('Iniciar sesión con Google'), findsOneWidget);
-      expect(find.text('Backend: ok'), findsOneWidget);
-    },
-  );
+    expect(find.text('Continuar con Google'), findsOneWidget);
+    expect(find.text('Pequeños momentos,'), findsOneWidget);
+    expect(find.text('grandes recuerdos'), findsOneWidget);
+  });
 
   testWidgets('shows user info and a logout button when authenticated', (
     tester,
@@ -124,7 +124,10 @@ void main() {
 
     expect(find.text('Ada'), findsOneWidget);
     expect(find.text('user@example.com'), findsOneWidget);
-    expect(find.text('Cerrar sesión'), findsOneWidget);
+    // "Cerrar sesión" moved out of the main content flow into a small
+    // account-action icon button (see home_screen.dart) — found by its
+    // tooltip, not as a full-width text button anymore.
+    expect(find.byTooltip('Cerrar sesión'), findsOneWidget);
   });
 
   testWidgets('shows a clear message after a failed/cancelled login attempt', (

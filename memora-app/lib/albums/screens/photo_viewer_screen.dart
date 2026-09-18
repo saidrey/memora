@@ -6,6 +6,7 @@ import 'package:photo_view/photo_view_gallery.dart';
 
 import '../../auth/auth_controller.dart';
 import '../../auth/drive_reconnect_prompt.dart';
+import '../../design/design.dart';
 import '../../photos/drive_token_api.dart';
 import '../../photos/photo_models.dart';
 import '../drive_thumbnail_service.dart';
@@ -25,6 +26,31 @@ import '../drive_thumbnail_service.dart';
 /// [DriveThumbnailService] instance the caller already uses for the grid —
 /// inheriting its in-memory cache (a photo already shown as a thumbnail
 /// opens instantly here) and never duplicating the download pipeline.
+///
+/// Visual layer restyled in Fase 2 del rediseño "Aurora" (sin spec de
+/// Kiro): still an immersive full-bleed viewer (no bright/light-card moment
+/// here — an island would fight the photo itself for attention, unlike a
+/// flow screen with a natural "reward" beat), but every `Colors.black`/
+/// `Colors.white*` literal is replaced with `MemoraColors`, and the
+/// error/unavailable "chrome" states reuse the app's icon-chip +
+/// `MemoraSecondaryButton` language instead of a bare `OutlinedButton`.
+/// NONE of `PhotoViewGallery`/`customChild`'s structure changed — see the
+/// gotcha below and in CLAUDE.md before touching anything about gestures.
+///
+/// **Light-first pivot (60-30-10, sin spec de Kiro)**: this screen is a
+/// **deliberate, explicit exception** to the pivot — kept dark on purpose,
+/// the same platform convention Apple Photos/Google Photos follow (a
+/// full-bleed photo viewer stays black even with the rest of the app in
+/// light mode: photo brightness/contrast matters more here than matching
+/// the app's own theme). Nothing about this screen's own colors changed —
+/// `MemoraColors.deepInk` is still its background. What DID change: several
+/// shared `lib/design/` tokens/components this screen borrows
+/// (`MemoraColors.border`/`.textSecondary`, `MemoraSecondaryButton`'s
+/// default foreground, `MemoraLoadingState`'s default spinner color) got
+/// re-calibrated for the light canvas that's now the rest of the app — so
+/// this screen can no longer rely on their defaults and passes explicit
+/// light-on-dark overrides instead (see `_StateOverlay` and
+/// `_PhotoViewerPage.build`).
 class PhotoViewerScreen extends StatefulWidget {
   const PhotoViewerScreen({
     super.key,
@@ -57,10 +83,11 @@ class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: MemoraColors.deepInk,
       appBar: AppBar(
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
+        backgroundColor: MemoraColors.deepInk,
+        elevation: 0,
+        foregroundColor: MemoraColors.paper,
         // Minimal chrome (UI mínima funcional, spec08): just a way back. No
         // metadata/location shown here (D8) — dimensions/capture date are
         // optional per the spec and not included in this cut.
@@ -72,6 +99,7 @@ class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
       body: PhotoViewGallery.builder(
         pageController: _pageController,
         itemCount: widget.photos.length,
+        backgroundDecoration: const BoxDecoration(color: MemoraColors.deepInk),
         builder: (context, index) {
           final photo = widget.photos[index];
           // .customChild (not `imageProvider:`) is what lets each page own
@@ -188,7 +216,7 @@ class _PhotoViewerPageState extends State<_PhotoViewerPage> {
   @override
   Widget build(BuildContext context) {
     if (_isUnavailable) {
-      return _placeholder(
+      return _StateOverlay(
         icon: Icons.cloud_off,
         message: 'Foto no disponible',
       );
@@ -197,73 +225,148 @@ class _PhotoViewerPageState extends State<_PhotoViewerPage> {
     return FutureBuilder<Uint8List>(
       future: _future,
       builder: (context, snapshot) {
+        final Widget child;
         if (snapshot.connectionState != ConnectionState.done) {
-          return const Center(
-            child: CircularProgressIndicator(color: Colors.white),
+          // Explicit raw glassBlue: `MemoraLoadingState`'s default
+          // (glassBlueOnLight) is calibrated for the light canvas — this
+          // screen is the deliberate dark exception (see the class doc).
+          child = const Center(
+            key: ValueKey('loading'),
+            child: MemoraLoadingState(color: MemoraColors.glassBlue),
           );
-        }
-        if (snapshot.hasError) {
+        } else if (snapshot.hasError) {
           final error = snapshot.error;
           if (error is DriveReauthorizationRequiredException) {
-            return _errorState(
-              message: 'Hace falta reconectar Google Drive para ver '
-                  'esta foto.',
+            child = _StateOverlay(
+              key: const ValueKey('reauth-error'),
+              icon: Icons.link_off,
+              message: 'Hace falta reconectar Google Drive para ver esta foto.',
               actionLabel: _isReconnectingDrive
                   ? 'Reconectando...'
                   : 'Reconectar Google Drive',
               onAction: _isReconnectingDrive ? null : _reconnectDrive,
+              loading: _isReconnectingDrive,
+            );
+          } else {
+            child = _StateOverlay(
+              key: const ValueKey('generic-error'),
+              icon: Icons.broken_image_outlined,
+              message: 'No se pudo cargar la foto.',
+              actionLabel: 'Reintentar',
+              onAction: _load,
             );
           }
-          return _errorState(
-            message: 'No se pudo cargar la foto.',
-            actionLabel: 'Reintentar',
-            onAction: _load,
+        } else {
+          child = Image.memory(
+            snapshot.data!,
+            key: const ValueKey('image'),
+            fit: BoxFit.contain,
           );
         }
-        return Image.memory(snapshot.data!, fit: BoxFit.contain);
+        // Placeholder -> fade-in -> image/error, same crossfade pattern as
+        // `_PhotoTile`/`_HeroPhotoImage` (point 6 of the motion pass) —
+        // safe to wrap here: `AnimatedSwitcher` is purely visual, it adds
+        // no gesture recognizer of its own, so it doesn't interact with the
+        // `photo_view` double-tap-arena gotcha documented on `_StateOverlay`.
+        return AnimatedSwitcher(
+          duration: MemoraMotion.moderate,
+          switchInCurve: MemoraMotion.enterCurve,
+          switchOutCurve: MemoraMotion.exitCurve,
+          child: child,
+        );
       },
     );
   }
+}
 
-  Widget _placeholder({required IconData icon, required String message}) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: Colors.white54, size: 48),
-          const SizedBox(height: 12),
-          Text(message, style: const TextStyle(color: Colors.white70)),
-        ],
-      ),
-    );
-  }
+/// The "unavailable" placeholder and every error state inside a photo_view
+/// page, unified into one small widget: an icon in a tinted circular chip
+/// (same visual language as `MemoraEmptyState`'s icon circle, just reused
+/// inline instead of that widget directly — `MemoraEmptyState` always
+/// renders its action as a `MemoraPrimaryButton`, which would be wrong here:
+/// "Reintentar"/"Reconectar Google Drive" are recovery actions inside one
+/// gallery page, not the screen's primary CTA, so they stay
+/// `MemoraSecondaryButton` — same choice `album_detail_screen.dart` makes
+/// for its own Drive-reauth banner).
+///
+/// Note on the ~300ms tap delay for [onAction] here: see CLAUDE.md — any
+/// interactive widget inside a `photo_view` `customChild` sits in the same
+/// gesture arena as `photo_view`'s always-registered double-tap-to-zoom
+/// recognizer, so the tap genuinely fires, just after Flutter's
+/// `kDoubleTapTimeout` elapses. Not something to "fix" by moving this
+/// overlay outside `customChild` — out of scope for this pass.
+///
+/// **Light-first pivot**: this widget used to reuse the shared
+/// `MemoraColors.surface2`/`.border`/`.textSecondary` tokens, which worked
+/// because they were dark-canvas-calibrated back then. They're now
+/// light-canvas-calibrated (mostly light greys/deepInk-based), so reusing
+/// them here would be nearly invisible against this screen's deliberately
+/// dark background. Rebuilt self-contained instead: a translucent
+/// Paper-tinted circle/border/icon, hardcoded, independent of the
+/// light-canvas tokens — same idea, computed relative to `deepInk`
+/// (background) instead of relative to `paper` (the rest of the app's
+/// background now).
+class _StateOverlay extends StatelessWidget {
+  const _StateOverlay({
+    super.key,
+    required this.icon,
+    required this.message,
+    this.actionLabel,
+    this.onAction,
+    this.loading = false,
+  });
 
-  Widget _errorState({
-    required String message,
-    required String actionLabel,
-    required VoidCallback? onAction,
-  }) {
+  final IconData icon;
+  final String message;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+
+  /// Forwarded to `MemoraSecondaryButton.loading` — see its doc comment.
+  final bool loading;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+
     return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.broken_image, color: Colors.white54, size: 48),
-          const SizedBox(height: 12),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Text(
-              message,
-              style: const TextStyle(color: Colors.white70),
-              textAlign: TextAlign.center,
+      child: Padding(
+        padding: const EdgeInsets.all(MemoraSpacing.lg),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: MemoraColors.paper.withValues(alpha: 0.08),
+                border: Border.all(
+                  color: MemoraColors.paper.withValues(alpha: 0.24),
+                ),
+              ),
+              child: Icon(
+                icon,
+                size: 32,
+                color: MemoraColors.paper.withValues(alpha: 0.75),
+              ),
             ),
-          ),
-          const SizedBox(height: 12),
-          OutlinedButton(
-            onPressed: onAction,
-            style: OutlinedButton.styleFrom(foregroundColor: Colors.white),
-            child: Text(actionLabel),
-          ),
-        ],
+            const SizedBox(height: MemoraSpacing.lg),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: textTheme.bodyMedium?.copyWith(color: MemoraColors.paper),
+            ),
+            if (actionLabel != null) ...[
+              const SizedBox(height: MemoraSpacing.lg),
+              MemoraSecondaryButton(
+                label: actionLabel!,
+                onPressed: onAction,
+                color: MemoraColors.paper,
+                loading: loading,
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }

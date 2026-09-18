@@ -764,6 +764,409 @@ sesión nunca confirma que se detuvo, y el gating de plataforma de
 `lockReadOnly`) — ver `test/nfc_programming_service_test.dart` y
 `test/nfc_programming_controller_test.dart`, y el detalle en CLAUDE.md.
 
+## Rediseño visual — Fase 1: sistema "Aurora" (sin spec de Kiro)
+
+> **OBSOLETO tras el pivot a light-first (60-30-10)** — ver "Rediseño
+> visual 'Aurora' — pivot a light-first (60-30-10)" más abajo (justo antes
+> de "Desarrollo"). Esta sección y las siguientes ("Fase 2", los ajustes
+> post-feedback) describen el sistema **dark-first** original; el layout/
+> las decisiones de estructura ahí siguen vigentes, pero cualquier mención
+> de colores/tokens (`MemoraTheme.dark`, `MemoraCardElevation.light`, "la
+> app es dark-first") quedó reemplazada por el pivot.
+
+Rediseño visual completo de la app pedido directamente por el usuario
+(dirección "Aurora / cielo nocturno" ya aprobada), en dos fases. **Fase 1
+(completa)**: el sistema de diseño reutilizable y su aplicación a
+`HomeScreen` y `AlbumsListScreen`, con un ajuste post-feedback ya aplicado
+(ver más abajo). **Fase 2 (en curso — primera pantalla lista, ver más
+abajo)**: aplicar el mismo sistema al resto de pantallas —
+`album_detail_screen.dart` (hecha), `photo_viewer_screen.dart`,
+`create_album_screen.dart`, `accept_invitation_screen.dart`,
+`nfc_programming_screen.dart` y `drive_reconnect_prompt.dart` (pendientes,
+a la espera de que el usuario revise `album_detail_screen.dart` en su
+celular) — estas últimas cinco siguen con su UI mínima funcional previa.
+
+### Ajuste post-feedback (sigue en Fase 1): balance claro/oscuro + hero del Welcome
+
+El usuario validó la Fase 1 corriendo la app en su celular y dio dos
+piezas de feedback puntuales, resueltas sin tocar la paleta ni ninguna
+pantalla fuera de `HomeScreen`:
+
+- **"Todo se ve muy oscuro, se usaron poco los tonos light"**: se agregó
+  `MemoraCardElevation.light` a `MemoraCard` (fondo Paper, contenido en
+  Deep Ink por defecto — mismos 5 colores de siempre, solo el extremo claro
+  que casi no se usaba) y se aplicó a las cards de acceso rápido
+  "Álbumes"/"Unirme a un álbum" del dashboard autenticado (las primeras que
+  se ven al loguearse), con el ícono de cada una en un chip circular con el
+  gradiente de firma. `AlbumsListScreen` se dejó sin cambios — no se
+  encontró un lugar para sumar presencia clara ahí sin romper el patrón de
+  gradiente de las cards de álbum ya aprobado (ver detalle en `CLAUDE.md`).
+- **Imagen hero para el Welcome + botón de login abajo (pedido explícito,
+  no una referencia de estilo)**: `assets/images/hero.png` (provista por
+  el usuario, usada tal cual, sin editar/comprimir) ahora es el fondo a
+  pantalla completa del estado no autenticado (`Image.asset(fit:
+  BoxFit.cover)`, fuera del `SafeArea` para cubrir la statusbar), con dos
+  scrims derivados de Deep Ink (arriba y abajo, nunca negro puro) para
+  garantizar contraste. El wordmark "Memora" pasó a ser chico y discreto
+  arriba a la izquierda; el headline ("Las historias / que importan /
+  siempre *contigo*", con "contigo" en Aura Violet) y el subtítulo van en
+  el tercio superior sobre el cielo de la foto; el botón de login quedó
+  anclado abajo (ya no centrado — resuelve también el espacio muerto que
+  se había notado en la Fase 1 original). El dashboard autenticado sigue
+  con el fondo oscuro liso/glow de siempre (`_AuroraBackdrop`), no la foto
+  — no tiene sentido en una pantalla de datos.
+
+Detalle técnico completo (el gotcha de `DefaultTextStyle`/estilos del
+`textTheme` con color explícito, los valores exactos de los scrims, y el
+detalle del texto transcripto de la referencia del usuario) en la sección
+"Ajuste post-feedback de Fase 1" de `CLAUDE.md`.
+
+Puramente visual: ningún controller, `*Api`, modelo, ni contrato de datos
+cambió. Ver la sección "Sistema de diseño visual — 'Aurora'" de
+`CLAUDE.md` para el detalle técnico completo (tokens, componentes,
+gotchas). Resumen:
+
+- **`lib/design/`** (nuevo) — tokens (`memora_colors.dart`,
+  `memora_typography.dart`, `memora_spacing.dart`), el `ThemeData` único de
+  la app (`memora_theme.dart`, aplicado en `main.dart` vía
+  `MaterialApp(theme: ...)`), y componentes reutilizables en
+  `widgets/`: `MemoraPrimaryButton`, `MemoraSecondaryButton`, `MemoraBadge`,
+  `MemoraCard`, `MemoraEmptyState`, `MemoraLoadingState`,
+  `MemoraFadeSlideIn` (entrada fade+slide, respeta "reduce motion"). Barrel
+  export: `lib/design/design.dart`.
+- **`pubspec.yaml`** — se agregó `google_fonts: ^8.2.1` (única dependencia
+  nueva de esta fase, resuelta vía `flutter pub add`; fuente Manrope,
+  pesos 400/600/700/800).
+- **`lib/screens/home_screen.dart`** — mismos controllers/callbacks
+  (`auth.signIn`/`signOut`, `_openAlbums`, `_openAcceptInvitation`, todo el
+  flujo de `PhotoUploadController` incluida la reconexión de Drive), capa
+  visual nueva: composición "Welcome" inmersiva (wordmark + glow de la
+  paleta, sin imagen stock) cuando no hay sesión, dashboard con avatar de
+  iniciales + cards de acceso rápido cuando sí la hay, chip de
+  conectividad del backend discreto (mismo texto "Backend: ok"/"Backend:
+  no disponible" que antes, para no romper los widget tests existentes).
+- **`lib/albums/screens/albums_list_screen.dart`** — mismo
+  `AlbumsController`/navegación (`_openAlbum`, `_openCreateAlbum`,
+  `RefreshIndicator`), reemplaza el `ListView`/`ListTile` por un grid de
+  cards abstractas (sin foto de portada — `AlbumListItem` no trae una, ver
+  CLAUDE.md): gradiente determinístico por álbum
+  (`lib/albums/screens/album_card_style.dart`, función pura
+  `gradientForAlbumId`, testeada en `test/album_card_style_test.dart`),
+  `photoCount` como stat protagonista, badge de rol desbordando el borde
+  superior de la card. El botón "crear álbum" pasó del ícono del `AppBar` a
+  un `FloatingActionButton` con el gradiente de firma. Estados de
+  carga/error/vacío con `MemoraLoadingState`/`MemoraEmptyState` (el vacío
+  con CTA "Crear álbum").
+- **Animaciones**: solo entrada fade+slide de las cards del grid
+  (`MemoraFadeSlideIn`, 250ms, escalonada por índice) y el feedback táctil
+  nativo (`InkWell`) de los botones — nada más. Respeta
+  `MediaQuery.of(context).disableAnimations`.
+
+### Fase 2 (en curso): `album_detail_screen.dart`
+
+Primera pantalla de Fase 2 — la más compleja de la app (grilla de fotos
+reales, secciones de compartir/colaboradores) y la primera donde el
+lenguaje "galería editorial" del brief aplica de verdad (fotos grandes
+protagonistas, transición curva imagen→contenido, un elemento desbordado
+con su propio criterio). Puramente visual: ningún controller/`*Api`/modelo
+cambió; todos los gotchas ya documentados (key-por-id+epoch, owner-only,
+`autofocus` prohibido, distinción de errores de Drive) se preservaron
+intactos. Detalle técnico completo (por qué el hero usa `_HeroPhotoImage` en
+vez de reutilizar `_PhotoTile`, el gotcha del `overlay` compartiendo el clip
+de `MemoraCurvedHero`, por qué el FAB pasó a ser un `MemoraPrimaryButton`)
+en la sección "Fase 2 (arranque)" de `CLAUDE.md`. Resumen:
+
+- **`lib/design/widgets/memora_curved_hero.dart`** (nuevo, exportado desde
+  `design.dart`) — `MemoraHeroCurve` (un `CustomClipper<Path>` con una
+  curva asimétrica tipo ola) + `MemoraCurvedHero` (imagen/gradiente
+  full-bleed con esa costura + un `overlay` opcional encima). Genérico y
+  reutilizable, no específico de álbum.
+- **`MemoraRadius.thumbnail`** (nuevo, 14.0, `lib/design/memora_spacing.dart`)
+  — radio dedicado para tiles de grilla de fotos.
+- **`MemoraTypography.legibilityShadows()`** (nuevo, `lib/design/memora_typography.dart`)
+  — el helper de sombra de texto sobre foto (ver el ajuste de Fase 1 más
+  abajo) generalizado para reuso en cualquier pantalla con texto compuesto
+  sobre una imagen; usado por el nombre del álbum en el hero de esta
+  pantalla.
+- **El hero**: la primera foto del álbum (`detail.photos.first`, vía
+  `DriveThumbnailService`, misma caché que la grilla) a pantalla completa
+  dentro de `MemoraCurvedHero`, con dos scrims (derivados de Deep Ink) y el
+  nombre del álbum + badge de rol superpuestos; si el álbum no tiene fotos,
+  cae al gradiente determinístico `gradientForAlbumId` que ya usa
+  `AlbumsListScreen` (mismo generador, sin duplicar). El `AppBar` se volvió
+  transparente (`extendBodyBehindAppBar: true`) en vez de eliminarse — sigue
+  dando el botón de volver y los íconos owner-only (renombrar/visibilidad/
+  eliminar) nativos, ahora flotando sobre la foto.
+- **El elemento desbordado de esta pantalla** es un pill de conteo de fotos
+  que straddlea la costura curva del hero (`_PhotoCountBadge`, usando
+  `MemoraCardElevation.light` — el "light island" que la propia
+  documentación de esa variante pedía para "uno o dos momentos de contraste
+  real" por pantalla) — deliberadamente DISTINTO del badge de rol
+  desbordando una card que ya usa `AlbumsListScreen` (ese patrón no se
+  repitió acá; el rol quedó simplemente inline en el overlay del hero).
+- **Grid de fotos**: 2 columnas (antes 3) para fotos más grandes/protagonistas,
+  mismo `SliverGrid.builder`/mismo `ValueKey('${photo.id}#$_epoch')`
+  intacto, tiles con `ClipRRect(MemoraRadius.thumbnail)` y colores del
+  sistema — la distinción visual `link_off` (reauth) vs `broken_image`
+  (genérico) se conserva.
+- **Compartir/Colaboradores**: ambas secciones ahora son un `MemoraCard`
+  (nivel 2) con `MemoraSecondaryButton` (destructivo para
+  revocar/bloquear/abandonar) en vez de `TextButton`/`OutlinedButton`
+  sueltos, `MemoraBadge` para el estado de una etiqueta NFC/QR, y filas de
+  colaborador/invitación con un chip circular en vez de `ListTile`. El FAB
+  "Agregar fotos" pasó a ser un `MemoraPrimaryButton` (el único de la
+  pantalla — por eso la sección de compartir usa siempre
+  `MemoraSecondaryButton`, incluida "Obtener enlace para compartir").
+- **Tocadas en la siguiente tanda** (ver más abajo, "Fase 2 (completa)"):
+  `photo_viewer_screen.dart`, `create_album_screen.dart`,
+  `accept_invitation_screen.dart`, `nfc_programming_screen.dart`,
+  `drive_reconnect_prompt.dart`.
+
+### Fase 2 (completa): las 5 pantallas restantes
+
+Última tanda de Fase 2 (sigue sin spec de Kiro): `photo_viewer_screen.dart`,
+`create_album_screen.dart`, `accept_invitation_screen.dart`,
+`nfc_programming_screen.dart`, `drive_reconnect_prompt.dart`. Con esto, las
+7 pantallas del alcance original de Fase 2 tienen el sistema "Aurora"
+aplicado — **Fase 2 queda completa**. Puramente visual: ningún controller
+(`NfcProgrammingController`, `AlbumsController`, `AuthController`)/`*Api`/
+modelo cambió; todos los gotchas documentados (el retraso de ~300ms de un
+botón dentro de `photo_view`, `autofocus` prohibido en `showDialog`, la
+máquina de estados completa de NFC) se preservaron intactos. Detalle técnico
+completo (por qué `photo_viewer_screen.dart` no tiene ningún momento
+`MemoraCardElevation.light`, el gotcha nuevo de `InputDecorationTheme`
+dentro de esa variante para `create_album_screen.dart`, y por qué el estado
+`success` de NFC es el que se llevó la card clara) en la sección
+"Rediseño visual 'Aurora' — Fase 2 (completa)" de `CLAUDE.md`. Resumen:
+
+- **`photo_viewer_screen.dart`** — solo chrome: `Colors.black`/
+  `Colors.white*` sueltos reemplazados por `MemoraColors` (incluido un
+  `backgroundDecoration` nuevo en `PhotoViewGallery.builder`, que el
+  paquete sí expone), y el placeholder "Foto no disponible" + los dos
+  estados de error (genérico/reauth) unificados en un widget nuevo,
+  `_StateOverlay` (icon chip + mensaje + `MemoraSecondaryButton` opcional
+  — nunca `MemoraPrimaryButton`, son acciones de recuperación de una
+  página de la galería, no el CTA de la pantalla). Ningún cambio a
+  `PhotoViewGallery.builder`/`.customChild` ni al gotcha de retraso de tap
+  de ~300ms — `test/photo_viewer_screen_test.dart` sigue pasando sin tocar
+  sus aserciones.
+- **`create_album_screen.dart`** — su momento `MemoraCardElevation.light`
+  es la card entera del formulario (ejemplo textual del brief). El campo
+  de nombre necesitó un `InputDecoration` a mano (borde inferior, sin
+  relleno, colores explícitos derivados de Deep Ink) porque el
+  `InputDecorationTheme` global de la app está calibrado para texto-sobre-
+  oscuro y es ilegible sobre Paper — gotcha nuevo, documentado en
+  `CLAUDE.md` como precedente para cualquier futuro `TextField` dentro de
+  una card clara.
+- **`accept_invitation_screen.dart`** — card `level2` (no `light`: unirse a
+  un álbum es una acción utilitaria de un paso, sin un "premio" natural que
+  justifique una isla clara), `InputDecorationTheme` global sin cambios (acá
+  sí calza, porque el campo vive sobre una superficie oscura). `autofocus:
+  true` preservado tal cual — sigue siendo seguro porque es
+  `Navigator.push`, no `showDialog`.
+- **`nfc_programming_screen.dart`** — su momento `MemoraCardElevation.light`
+  es el estado `success` (el otro ejemplo textual del brief), como "premio"
+  tras la escritura física. Ningún estado de `NfcProgrammingStatus` se
+  perdió: esperar/escribir/verificar sigue siendo una sola rama visual
+  (`_StateIconChip` + `MemoraLoadingState(label: statusMessage)`), y
+  error/cancelado sigue siendo la rama final, ahora con
+  `MemoraPrimaryButton` para "Reintentar" y
+  `MemoraSecondaryButton(destructive: true)` para "Deshabilitar etiqueta"
+  (antes ambos con el mismo peso visual). Nuevo widget `_StateIconChip`
+  reutiliza el lenguaje de chip circular ya establecido
+  (`_QuickAccessCard`/`_InitialsAvatar`/el FAB).
+- **`drive_reconnect_prompt.dart`** — el que menos cambió: su
+  `AlertDialog`/`SnackBar` ya heredaban la mayor parte de su estilo del
+  `dialogTheme`/`snackBarTheme` de `MemoraTheme.dark` por ser widgets
+  estándar de Flutter. Se agregó un ícono en el título del diálogo de
+  confirmación, colores distintos para "Cancelar" (muted) vs "Reconectar"
+  (acentuado), y un ícono de resultado en el `SnackBar` final.
+- Confirmado: ningún `MemoraPrimaryButton` aparece más de una vez
+  simultáneamente en el árbol de ningún build de estas 5 pantallas (aunque
+  `nfc_programming_screen.dart` usa uno distinto en `success` y otro en el
+  estado de error — nunca ambos a la vez, son branches mutuamente
+  excluyentes).
+- **Pendiente después de esto (ya lo pidió el usuario, todavía no
+  iniciado)**: una pasada final de refinamiento sobre TODA la app — no es
+  parte de esta tarea.
+
+### Ajuste chico post-feedback (sigue sin spec de Kiro): jerarquía de "Cerrar sesión"
+
+El usuario, viendo el dashboard autenticado en su celular, notó que el botón
+"Cerrar sesión" (antes un `MemoraSecondaryButton` de ancho completo, con el
+mismo peso visual que las acciones principales, parado en medio del flujo
+entre las cards de acceso rápido y la sección de fotos) se veía "sin orden,
+sin sentido ahí en medio". Solo se tocó `lib/screens/home_screen.dart` (y su
+test en `test/widget_test.dart`) — ninguna otra pantalla, ningún controller.
+
+- Se sacó el `MemoraSecondaryButton` del flujo principal de
+  `_AuthenticatedDashboard` y se movió a un `IconButton` (`Icons.logout`,
+  `tooltip: 'Cerrar sesión'`) en el Row superior que ya mostraba el chip de
+  conectividad del backend — mismo `auth.signOut` de siempre. Se eligió esto
+  (en vez de dejarlo al final del scroll como texto chico) porque
+  `HomeScreen` no tiene `AppBar` real, pero ese Row cumple el mismo rol
+  visual; y porque el `IconButton`+`tooltip` es exactamente el patrón que ya
+  usa `album_detail_screen.dart` para sus acciones owner-only en el
+  `AppBar`, así que no introduce un patrón nuevo a la app.
+- El ícono solo aparece cuando `auth.status == AuthStatus.authenticated`
+  (antes ese lado del Row alternaba entre el wordmark "Memora" del Welcome y
+  un `SizedBox.shrink()` para cualquier otro estado); no aparece durante
+  `authenticating`/`unknown`, donde cerrar sesión no tiene sentido.
+- Orden resultante de `_AuthenticatedDashboard`: greeting → cards de acceso
+  rápido (Álbumes/Unirme) → sección de Fotos — se revisó con el mismo
+  criterio de jerarquía y no hizo falta reordenar nada más.
+- `test/widget_test.dart` — el test "shows user info and a logout button
+  when authenticated" ahora busca `find.byTooltip('Cerrar sesión')` en vez
+  de `find.text('Cerrar sesión')` (ya no es un botón de texto).
+
+### Pendiente para el usuario/Kiro (no resuelto en esta tarea)
+
+- **Revisión de `album_detail_screen.dart` en dispositivo real** (Fase 2,
+  ver arriba) — en particular cómo se ve el hero con una foto real de
+  distinto aspect ratio/orientación, la legibilidad del nombre del álbum
+  sobre la foto, y el posicionamiento del pill de conteo de fotos sobre la
+  costura curva (los valores de offset/altura se ajustaron a ojo, sin poder
+  verlos corriendo en un dispositivo real desde este entorno).
+- **Revisión en dispositivo real de las 5 pantallas de la última tanda de
+  Fase 2** (ver arriba) — en particular: el visor de foto (el retraso real
+  de ~300ms al tocar "Reintentar"/"Reconectar Google Drive" dentro del
+  zoom/pan de `photo_view`, ya documentado como esperado, pero vale
+  sentirlo en mano; y cómo se ve `_StateOverlay` sobre una foto real detrás
+  del `PhotoViewGallery`), la card clara del formulario de crear álbum
+  (contraste del campo con borde inferior sobre Paper), y la card clara del
+  estado de éxito de NFC (solo verificable con hardware NFC real, ver
+  "Qué no es testeable sin dispositivo" en `CLAUDE.md`).
+- **Fase 2 del rediseño visual queda completa con esta tarea.** El usuario
+  ya pidió, como siguiente paso, una pasada final de refinamiento visual
+  sobre TODA la app (no solo las pantallas tocadas en Fase 1/2) — todavía
+  no iniciada, es la próxima tarea, no parte de esta.
+- **Revisión de esta Fase 1 ajustada** (balance claro/oscuro + hero del
+  Welcome, ver arriba) antes de aplicar el mismo sistema al resto de
+  pantallas en Fase 2 — probar en dispositivo real, en particular cómo se
+  ve `hero.png` a pantalla completa en distintos tamaños/aspect ratios de
+  celular y el contraste real de los scrims sobre la foto.
+- **Tamaño del bundle**: `assets/images/hero.png` pesa ~1.8MB, sin
+  comprimir (pedido explícito del usuario de no tocar el archivo) — si el
+  tamaño final del APK/IPA importa, es una decisión de build/release para
+  el PO/Kiro.
+- **Hallazgo real, no corregido**: `android/app/src/main/AndroidManifest.xml`
+  no declara `android.permission.INTERNET` (solo existe en los manifests de
+  `debug`/`profile`) — un build de **release** de esta app, tal como está,
+  no tendría permiso de red y rompería todas las llamadas de red en
+  producción (backend, Google Sign-In, Drive, y ahora también la descarga
+  de fuentes de `google_fonts`). No es un problema introducido por esta
+  tarea (ya afectaba a todas las specs anteriores) ni se corrigió acá por
+  tocar configuración de release/build, fuera del alcance de un rediseño
+  puramente visual — ver el detalle completo en `CLAUDE.md`.
+- Ninguna dependencia nueva más allá de `google_fonts` durante Fase 1/2.
+  **Actualizado**: la pasada de post-feedback de abajo sí agregó una
+  (`flutter_animate`), pedida explícitamente por el usuario.
+
+## Post-feedback de Fase 2 (sin spec de Kiro): bug de borrado, bottom sheet, dinamismo con `flutter_animate`
+
+El usuario probó las 7 pantallas de Fase 2 en su celular real y dio
+feedback concreto en tres partes, todas resueltas en esta pasada — detalle
+técnico completo (el gotcha de `Hero`+`ClipPath`, el bug real encontrado en
+`MemoraHeroCurve.shouldReclip`, el `ListenableBuilder` que necesita el
+bottom sheet) en la sección correspondiente de `CLAUDE.md`:
+
+- **Bug real corregido**: quitar una foto del álbum (el "×" de cada
+  miniatura) ahora pide confirmación (`AlertDialog`, mismo patrón que el
+  resto de acciones destructivas de la app) antes de llamar
+  `AlbumsController.removePhotoFromCurrentAlbum` — antes lo llamaba
+  directo, así que un toque accidental borraba la foto sin ningún paso
+  intermedio. Nuevo test: `test/album_detail_screen_test.dart`.
+- **Reestructuración de información**: las secciones "Compartir" y
+  "Colaboradores" de `album_detail_screen.dart` (antes siempre expandidas
+  debajo de la grilla de fotos, "mucha información en una sola pantalla,
+  mucho ruido visual") se movieron a un `showModalBottomSheet`, disparado
+  por un ícono nuevo en el `AppBar` (`Icons.people_alt_outlined`,
+  "Colaboradores y compartir", visible para owner y colaborador). El
+  `CustomScrollView` principal ahora solo tiene el hero, la grilla de
+  fotos, y los banners de error/reauth (información crítica, no se movió).
+  Mismos controllers/lógica/gating owner-only de siempre — solo cambió
+  dónde se renderiza.
+- **Más dinamismo (`flutter_animate: ^4.5.2`, agregado vía `flutter pub
+  add`, permiso explícito del usuario)**: entrada escalonada real (fade +
+  escala) del grid de fotos y de las secciones del bottom sheet nuevo;
+  feedback de toque con una escala sutil al presionar en
+  `MemoraPrimaryButton`/`MemoraSecondaryButton`/`MemoraCard` (con
+  `AnimatedScale` + `InkWell`, no hizo falta el paquete nuevo para esto);
+  y una transición `Hero` real (nativa de Flutter) entre la card de álbum
+  de `AlbumsListScreen` y el hero de `album_detail_screen.dart`, con tag
+  compartido `'album-hero-${album.id}'`. Todo respeta `MediaQuery.of(context)
+  .disableAnimations` explícitamente.
+- **Pendiente de revisión del usuario en su celular**: el vuelo del `Hero`
+  entre la lista y el detalle de álbum — se tomó la opción más
+  conservadora entre las dos que permitía la spec de esta tarea (mantener
+  el `Hero` dentro de `MemoraCurvedHero.background`, con su `ClipPath`
+  como ancestro, no como descendiente) porque este entorno no tiene forma
+  de correr la app y ver el vuelo en un dispositivo real. Si se ve
+  raro (flicker/tamaño extraño) durante la animación, `CLAUDE.md` documenta
+  el siguiente paso (sacar el `Hero` fuera del `ClipPath` con una máscara
+  separada).
+
+## Rediseño visual "Aurora" — pivot a light-first (60-30-10, sin spec de Kiro)
+
+Tras validar Fase 1/2 varias veces en dispositivo real, el usuario siguió
+viendo la app "sin vida"/"muy oscura". Compartió dos referencias reales de
+apps de fotos/colecciones compartidas y pidió aplicar 60-30-10. Decisión
+tomada directamente con él: **pivotar de dark-first a light-first** — mismo
+remapeo semántico de los 5 colores exactos de siempre (ningún hex cambió),
+aplicado a `lib/design/` completo + las 7 pantallas de Fase 1/2. Detalle
+técnico completo (gotchas, cada call site migrado, la verificación de
+contraste) en la sección homónima de `CLAUDE.md`. Resumen:
+
+- **Mapeo**: 60% `paper` (lienzo), 30% `mist` (superficie secundaria), 10%
+  `deepInk` dividido en texto ("tinta") + acento oscuro protagonista puntual
+  (nunca fondo de pantalla completo), 10% `signatureGradient` sin cambios
+  (CTAs, avatares, badges, y ahora también bordes de card).
+- **`memora_theme.dart`**: `MemoraTheme.dark` renombrado a
+  `MemoraTheme.theme` (único call site: `main.dart`), `ColorScheme.light()`,
+  `scaffoldBackgroundColor: paper`.
+- **`MemoraCardElevation`**: `level1`/`level2` pasaron a ser las
+  superficies claras por defecto (ya no una excepción); la vieja variante
+  `.light` (Paper, la excepción clara rara) se reemplazó por
+  **`.ink`** (Deep Ink, la nueva excepción oscura rara) — mismo rol de
+  "momento protagonista", espejado.
+- **`MemoraSecondaryButton`/`MemoraBadge`/`MemoraLoadingState`/
+  `MemoraEmptyState`**: sus colores por defecto se recalibraron para el
+  lienzo claro (antes calibrados para el lienzo oscuro universal); cada uno
+  ganó un override explícito opcional para las excepciones oscuras
+  deliberadas.
+- **`semanticError`/`semanticSuccess` se oscurecieron** (rojo-700/verde-700,
+  ~6.6:1/~4.8:1 sobre Paper — los pasteles originales daban solo ~2:1 sobre
+  Paper). Los originales se conservan como `semanticErrorOnDark`/
+  `semanticSuccessOnDark` para las excepciones oscuras.
+- **Hallazgo no anticipado**: `glassBlue`/`auraViolet` crudos son
+  demasiado claros (~1.6:1) para usarse como ícono/texto/borde directo
+  sobre Paper/Mist — se agregaron `glassBlueOnLight`/`auraVioletOnLight`
+  (mezclados hacia Deep Ink, ~4.5:1) para esos casos.
+- **Las 4 excepciones oscuras deliberadas** (documentadas explícitamente,
+  no descuidos): `photo_viewer_screen.dart` completo (convención de
+  plataforma — Apple/Google Fotos mantienen el visor en negro incluso en
+  modo claro), el hero/Welcome de `HomeScreen` (foto con scrim, sin
+  cambios de composición), el overlay del hero de álbum en
+  `album_detail_screen.dart`, y cualquier card `MemoraCardElevation.ink`.
+- **`AlbumsListScreen`**: el FAB de "+" pasó a círculo sólido Deep Ink
+  (el ejemplo textual de la referencia); las cards de álbum pasaron de
+  gradiente de fondo completo a un **borde grueso con el gradiente**
+  alrededor de una card clara (patrón "cada colección con su propio marco
+  de color").
+- **`create_album_screen.dart`/`accept_invitation_screen.dart`**: se
+  simplificaron — el `InputDecoration` a mano que necesitaba
+  `create_album_screen.dart` (porque el theme global de inputs era oscuro y
+  su card era clara) ya no hace falta, porque el theme global ahora es
+  claro; `accept_invitation_screen.dart` no necesitó ningún cambio de
+  código.
+- **`nfc_programming_screen.dart`**: el estado `success` pasó de la vieja
+  card clara (`.light`) a la nueva card oscura (`.ink`) — mismo rol de
+  "premio", espejado.
+- Verificado: `flutter analyze` sin warnings, `flutter test` en verde
+  (162 tests). Puramente visual — ningún controller/`*Api`/modelo cambió;
+  todos los gotchas de interacción/estado documentados en las secciones de
+  arriba siguen intactos.
+
 ## Desarrollo
 
 ```bash
@@ -864,6 +1267,342 @@ sesión con Drive autorizado (ver la nota de verificación de
 de sesión o revocar el permiso de Drive en una cuenta de Google real para
 validar el refresh/reconexión de punta a punta requiere dispositivo — lo
 hace el PO.
+
+## Ajuste visual post-feedback: cards con fotos reales, empty state, FAB glass, dashboard (sin spec de Kiro)
+
+Cuatro pedidos puntuales tras validar el pivot light-first en dispositivo
+real (ver el detalle completo, decisiones y gotchas en `CLAUDE.md`, sección
+"Ajuste visual post-feedback: cards con fotos reales, empty state
+ilustrado, FAB glass, dashboard reestructurado"):
+
+1. **`AlbumsListScreen`: cards de álbum con fotos reales tipo "montaje".**
+   `AlbumsController` ahora, tras `loadAlbums()`, pide de forma perezosa y
+   no bloqueante el `AlbumDetail` de cada álbum con `photoCount > 0` solo
+   para cachear (en memoria, por sesión) sus primeras 3 fotos —
+   `coverPhotosFor(albumId)`. Cada card muestra un abanico de hasta 3
+   miniaturas reales (Polaroid, vía la misma `DriveThumbnailService` de
+   siempre) en cuanto llegan; hasta entonces, o si el álbum no tiene fotos,
+   se mantiene el fallback abstracto de siempre. **Decisión de arquitectura
+   aceptada explícitamente por el usuario** (lo pidió dos veces): un N+1 de
+   requests desde la lista — marcado para Kiro por si el backend algún día
+   agrega una portada a `GET /albums`.
+2. **Empty state ilustrado.** `MemoraEmptyState` ganó un parámetro opcional
+   `imageAsset`; `AlbumsListScreen` lo usa con `assets/images/empty.png`
+   (nuevo asset, provisto por el usuario) + copy nueva, en vez del ícono
+   genérico anterior.
+3. **FAB de "crear álbum" con glassmorphism real** (`BackdropFilter` +
+   blur + relleno semi-transparente + borde sutil) en vez del círculo
+   sólido Deep Ink. **Revertido en el ajuste siguiente** (ver más abajo): el
+   glass resultó ilegible sobre el lienzo Paper en un dispositivo real.
+4. **`HomeScreen._AuthenticatedDashboard` reestructurado**: las 3 acciones
+   (Álbumes/Unirme a un álbum/Fotos) pasaron de "2 cards en fila + 1 card
+   distinta debajo" a 3 bloques full-width apilados, cada uno con un tono
+   deliberadamente distinto — Álbumes oscura (`MemoraCardElevation.ink`,
+   la de mayor peso), Unirme clara (`level1`, compacta), Fotos con marco de
+   gradiente (el "tono contraste"), con el mismo contenido/controllers
+   exactos que antes en cada una.
+
+`flutter analyze` sin warnings, `flutter test` en 166/166 (incluye
+`test/albums_controller_covers_test.dart`, nuevo, para el mecanismo de
+covers). No verificado en dispositivo real en este entorno: el render real
+del blur/FAB, el aspecto real de las cards con fotos y el dashboard
+reestructurado — el usuario debe confirmarlos corriendo la app.
+
+## Ajuste visual post-feedback en dispositivo real: FAB glass ilegible + panel de colaboradores rediseñado
+
+Dos piezas de feedback puntuales tras probar la versión anterior en un
+celular real (sin spec de Kiro). Alcance acotado a
+`_GlassCreateAlbumFab` (`albums_list_screen.dart`) y a la sección de
+compartir/colaboradores del bottom sheet de `album_detail_screen.dart`
+(`_openSharingSheet`) — ninguna otra pantalla, ningún controller/`*Api`/
+modelo tocado. Detalle completo (incluyendo el porqué de cada decisión) en
+`CLAUDE.md`, sección "Ajuste visual post-feedback en dispositivo real: FAB
+glass ilegible + panel de colaboradores rediseñado".
+
+1. **FAB "crear álbum"**: el glass del punto 3 de arriba resultó casi
+   invisible sobre el lienzo Paper en un dispositivo real ("fondo claro
+   sobre fondo claro" — el usuario solo veía el "+" flotando sin ningún
+   círculo alrededor). Reemplazado por un relleno SÓLIDO con
+   `MemoraColors.signatureGradient`, ícono "+" en `MemoraColors.paper`, y
+   una sombra suave derivada de `MemoraColors.deepInk` para que siga
+   flotando visualmente. Sin `BackdropFilter`, sin transparencia.
+2. **Panel "Colaboradores y compartir"**: feedback textual — "todo sin
+   vida, sin orden, puros botones ahi puestos, sin secciones definidas y
+   todo color claro, parece una hoja de un articulo de oficina". Cada
+   sección (Compartir / Colaboradores) ganó un header con chip circular de
+   `signatureGradient` + título con jerarquía tipográfica real (mismo
+   lenguaje que `_QuickAccessCard`/`_InitialsAvatar` de `HomeScreen`), un
+   teñido sutil de fondo distinto por sección (Glass Blue para Compartir,
+   Aura Violet para Colaboradores, vía la nueva `_sectionTint`) y
+   `Divider`s reales entre sub-bloques en vez de solo espacio en blanco.
+   Los colaboradores ahora se muestran como un **stack de avatares
+   circulares superpuestos** con iniciales derivadas del `userId` (no hay
+   nombre/email disponible — limitación de PII ya documentada más abajo);
+   tocar un avatar dispara la misma confirmación de "quitar" de siempre. El
+   bloque de enlace de compartición bajó de dos botones compitiendo
+   (Compartir/Revocar) a una acción primaria ("Compartir") + un
+   `IconButton` con tooltip para "Revocar". Mismos controllers/lógica/
+   gating owner-only exactos — 100% capa visual.
+
+`flutter analyze` → sin issues. `flutter test` → 166/166 (mismo total;
+ningún test ejercita el contenido interno del sheet, así que no hubo
+regresiones ni tests nuevos necesarios). No verificado en dispositivo real
+en este entorno: el aspecto real del FAB sólido y del panel rediseñado — el
+usuario debe confirmarlos corriendo la app.
+
+## Pasada de motion design (sin spec de Kiro): sistema centralizado, loading states, microinteracciones
+
+Pedido directo del usuario: motion design real por encima del sistema
+visual "Aurora"/light-first (60-30-10) ya documentado arriba. Detalle
+completo (incluyendo el gotcha de `initState`+`MediaQuery` y el patrón
+`_pendingAction`/`loading:` para distinguir qué botón mutando está cargando)
+en `CLAUDE.md`, sección "Pasada de motion design (sin spec de Kiro): sistema
+centralizado, loading states, microinteracciones".
+
+Retomó un intento anterior que se había cortado a mitad de camino por un
+error de sesión (no de código), con progreso real parcial ya en el repo
+(`lib/design/memora_motion.dart`, `memora_page_route.dart`,
+`widgets/memora_skeleton.dart`) pero **un bug real que dejaba 1 test roto**.
+
+1. **Bug corregido**: `_MemoraSkeletonState`/`_FloatingEmptyIllustrationState`
+   (`albums_list_screen.dart`) llamaban `MemoraMotion.reduceMotion(context)`
+   (que usa `MediaQuery` internamente) desde `initState()` — inválido en
+   Flutter (cualquier lookup de `InheritedWidget` debe ir en `build()`/
+   `didChangeDependencies()`). Movido a `didChangeDependencies()` con un
+   flag `_startedRepeating` para no reiniciar el loop en cada llamada
+   posterior. Grepeado el resto de `lib/design/` y las pantallas tocadas:
+   ningún otro sitio tenía el mismo problema.
+2. **Sistema centralizado confirmado completo**: `MemoraMotion` (duraciones
+   `quick`/`moderate`, curvas `enterCurve`/`exitCurve`, `stagger()`,
+   `reduceMotion()`), `MemoraPageRoute` (reemplaza `MaterialPageRoute` en
+   TODOS los `Navigator.push`/`pushReplacement` de la app — se corrigió el
+   único sitio que aún usaba `MaterialPageRoute` directo,
+   `AcceptInvitationScreen`'s `pushReplacement`).
+3. **Hero álbum→detalle**: confirmado funcionando (el fix de
+   `MemoraHeroCurve.shouldReclip` ya documentado arriba sigue vigente).
+4. **Entrada con stagger**: confirmado (`_animatedAlbumIds` en
+   `AlbumsListScreen` ya evita re-animar toda la grilla al crear un álbum
+   nuevo — trackea qué ids ya animaron, sin re-disparar `MemoraFadeSlideIn`
+   para los que ya estaban en pantalla).
+5. **Loading states de TODAS las mutaciones**: nuevo parámetro `loading` en
+   `MemoraPrimaryButton`/`MemoraSecondaryButton` (spinner reemplaza el
+   ícono, label se mantiene, taps bloqueados) — conectado a cada botón de
+   mutación de `album_detail_screen.dart` (rename/visibility/delete ya lo
+   tenían vía `_AppBarActionIcon`; se sumaron invite/revoke-invitation/
+   remove-collaborator/leave/create-tag/program-nfc/disable-tag/
+   revoke-share-link), `create_album_screen.dart`,
+   `accept_invitation_screen.dart` y `nfc_programming_screen.dart`
+   ("Bloquear como solo lectura"/"Deshabilitar etiqueta"). Dos pantallas
+   (`CreateAlbumScreen`, y `_giveUpAndDisable` en
+   `NfcProgrammingScreen`) no escuchaban su propio controller — se les
+   agregó un flag de estado local (`_submitting`/`_disabling`) en vez de
+   depender de `controller.isMutating`, que ahí no dispara rebuild.
+6. **Estados de fotografías**: `_PhotoTile`/`_HeroPhotoImage`
+   (`album_detail_screen.dart`) ya estaban completos desde antes del corte.
+   `photo_viewer_screen.dart` ganó el mismo patrón placeholder→fade→imagen
+   vía `AnimatedSwitcher` (antes era un swap abrupto) — seguro dentro del
+   `customChild` de `photo_view` porque `AnimatedSwitcher` no registra
+   gestos propios.
+7-12. Microinteracciones (`AnimatedScale` en botones/cards), empty states
+   ilustrados, `AnimatedSwitcher` para loading/error/contenido, toda
+   animación gateada por `MemoraMotion.reduceMotion` (sin checks ad-hoc —
+   verificado por grep), y `RepaintBoundary`/`dispose()` en los
+   `AnimationController` existentes: todos confirmados ya cumplidos, sin
+   cambios adicionales necesarios.
+
+`flutter analyze` → `No issues found!`. `flutter test` → **166/166**
+pasando (0 tests nuevos: el bug fix hizo pasar el test que ya existía para
+la confirmación de borrado de foto; el resto de esta pasada es motion/
+loading sobre widgets ya cubiertos indirectamente). No verificado en
+dispositivo real en este entorno: el aspecto real de transiciones/loading
+states/microinteracciones — el usuario debe confirmarlo corriendo la app.
+
+## Ajuste visual post-mockup: hero "Álbumes", nota caligráfica y bottom nav (sin spec de Kiro)
+
+Réplica de un mockup exacto compartido por el usuario (`principal.png`, no
+está en el repo) para el bloque "Álbumes" del dashboard, más una nota
+caligráfica de cierre y una barra de navegación inferior nueva. Detalle
+completo (decisiones, gotchas, caveats de dispositivo) en `CLAUDE.md`,
+sección "Ajuste visual post-mockup: hero 'Álbumes', nota caligráfica y
+bottom nav". Alcance acotado a `lib/screens/home_screen.dart` +
+`pubspec.yaml` (asset nuevo) — ningún controller/`*Api`/modelo tocado;
+`AlbumsListScreen`/`album_detail_screen.dart`/el resto de pantallas y el
+sistema de motion existente no se tocaron.
+
+1. **`_AlbumsActionBlock` rediseñado**: de la card clara con franja de
+   gradiente anterior a un hero oscuro con `RadialGradient` (Aura Violet →
+   Deep Ink, el exacto que pidió el usuario), esferas de glow extra con el
+   mismo patrón de blur ya usado en `_AuroraBackdrop`, el asset
+   `assets/images/principal_asset.png` (nuevo, declarado en `pubspec.yaml`)
+   desbordando la esquina superior derecha, un eyebrow "TUS ÁLBUMES", un
+   headline de dos líneas con la última palabra ("compartes.") en el
+   gradiente de firma vía `ShaderMask`, un círculo con flecha decorativo, y
+   3 puntos de paginación **puramente decorativos** (no hay `PageView` real
+   ni una "página 2" con contenido — documentado explícitamente en el
+   código para que no se confunda con un carrusel funcional).
+   `assets/images/principal_fondo.png` (el otro asset provisto) **no se
+   usó**: el efecto de fondo se replicó con gradiente + blur de Flutter
+   puro y quedó suficientemente parecido, así que no se declaró en
+   `pubspec.yaml` (queda disponible si un futuro ajuste sí lo necesita como
+   imagen real).
+2. **Nota caligráfica de cierre**: "Recuerdos que nos conectan" + un
+   corazón chico, en `GoogleFonts.caveat` (nueva, usada solo en este
+   `Text` puntual — `MemoraTypography` sigue siendo Manrope en todo lo
+   demás), con un glow violeta grande y borroso detrás, al final de
+   `_AuthenticatedDashboard`.
+3. **Bottom navigation bar nueva** (`_AuroraBottomNav`, adición real a la
+   app — antes no existía): 4 ítems + un "+" central flotante con el
+   mismo lenguaje sólido-con-gradiente que el FAB de `AlbumsListScreen`
+   (sin repetir el experimento de glassmorphism ya descartado). Solo
+   visible con sesión iniciada (`Scaffold.bottomNavigationBar`, nunca en el
+   Welcome). **Inicio**: esta misma pantalla, activo por defecto, sin
+   navegación. **Álbumes**: el mismo `Navigator.push` que ya usa el resto
+   del dashboard. **"+"**: la misma
+   `PhotoUploadController.pickAndUploadPhotos()` que ya dispara "Agregar
+   fotos" en `_PhotosSection` — ningún flujo nuevo. **Compartidos/
+   Ajustes**: sin pantalla (decisión de producto ya tomada con el usuario,
+   marcada para una futura spec de Kiro) — tocarlos solo muestra un
+   `SnackBar` "muy pronto", nunca navegan ni crashean.
+4. **Corrección post-feedback en dispositivo real (mismo alcance acotado a
+   `home_screen.dart`)**: el usuario probó lo anterior en su celular contra
+   el mockup original y dio 2 ajustes puntuales. Detalle completo en
+   `CLAUDE.md`, sección "4. Corrección post-feedback en dispositivo real:
+   fondo oscuro continuo, no card encajonada" (dentro del mismo bloque de
+   arriba). Resumen:
+   - El gradiente oscuro dejó de ser una card aislada sobre fondo blanco:
+     ahora es el fondo de TODA la zona superior del dashboard autenticado
+     (header con logout+badge, fila de avatar+nombre+email, y el contenido
+     del hero de "Álbumes", sin blanco entre medio) — recién donde empieza
+     "Unirme a un álbum" el fondo pasa a `Paper`. `_AlbumsActionBlock` se
+     renombró a `_AlbumsHeroContent` (perdió su propio fondo/altura fija) y
+     un nuevo `_DashboardDarkZone` pinta el `RadialGradient`+glow una sola
+     vez para header+avatar+hero juntos, dimensionado por su propio
+     contenido (no un alto fijo calculado a mano). Header/avatar pasaron a
+     colores explícitos Paper (antes vivían sobre el lienzo claro del
+     dashboard, donde el tema ambient ya era correcto por defecto).
+   - Más espacio (`MemoraSpacing.xxl`/`.md`, ningún número suelto) entre el
+     header, la fila de avatar y el eyebrow "TUS ÁLBUMES", que antes quedaba
+     apretado contra el borde superior.
+
+`flutter analyze` → `No issues found!`. `flutter test` → **166/166**
+pasando (sin tests nuevos en ninguna de las dos pasadas: el cambio es 100%
+composición visual/layout sobre callbacks/controllers ya cubiertos
+indirectamente, y ningún test existente busca el texto exacto del
+hero/footer/bottom nav, así que seguir en verde confirma que nada rompió
+pero no es una aserción dedicada). **No verificado en dispositivo real en
+este entorno**: el aspecto real del gradiente radial/asset decorativo/glow
+del hero (incluido el nuevo `Alignment`/`radius` reajustados para la zona
+más alta), la nota caligráfica, la barra de navegación inferior, y que el
+corte dark→light se vea continuo/sin caja blanca — el usuario debe
+confirmarlos corriendo la app.
+
+## Ajuste visual post-feedback en dispositivo real: revert del hero de Home + rediseño completo de `AlbumsListScreen` (sin spec de Kiro)
+
+Dos piezas de feedback tras probar la app en el celular real (detalle
+completo en `CLAUDE.md`):
+
+1. **Revert puntual del hero "Álbumes" de `HomeScreen`**: la tarea anterior
+   había hecho que el gradiente oscuro fuera el fondo de toda la zona
+   superior (header+avatar+hero). El usuario prefería la versión anterior
+   ("TUS ALBUMES se veia mejor como una tarjeta") — vuelto a una card
+   contenida (`_AlbumsHeroCard`, `ClipRRect(MemoraRadius.hero)` con su
+   propio gradiente/glow), flotando sobre el lienzo `Paper` normal; el
+   header y la fila de avatar volvieron a colores por defecto del tema. El
+   espaciado extra (`MemoraSpacing.xxl`/`.md`) sumado en la tarea anterior
+   **se mantuvo**.
+2. **Rediseño completo de `AlbumsListScreen`** según una referencia visual
+   exacta del usuario (no en el repo): header "Mis álbumes" +
+   "`{N} álbumes · {M} recuerdos`", dos círculos de acción (búsqueda —
+   placeholder "muy pronto", no es una feature real — y crear álbum, que
+   reemplaza al FAB eliminado), grid de 2 columnas con la foto de portada
+   REAL de cada álbum a pantalla completa (una sola foto, ya no el montaje
+   de 2-3 en abanico), menú "···" por card con Renombrar/Eliminar
+   funcionales (reutiliza `AlbumsController.loadAlbumDetail` +
+   `renameCurrentAlbum`/`deleteCurrentAlbum`, el mismo mecanismo que
+   `AlbumDetailScreen`, sin inventar ningún método nuevo), una card
+   promocional al final de la grilla, y el mismo `AuroraBottomNav` de
+   `HomeScreen` abajo (extraído a `lib/design/widgets/aurora_bottom_nav.dart`
+   para no duplicarlo entre las dos pantallas — parametrizado por
+   `activeTab`).
+   - Estado "sin fotos" de una card (`photoCount == 0`): área de portada
+     oscura con ícono + "Aún no hay fotos" / "Agrega recuerdos para que
+     este álbum cobre vida." — distinto del estado "cover todavía
+     cargando" (skeleton), que sigue siendo un caso separado.
+   - **Limitación de datos conocida, no inventada**: la referencia mostraba
+     una descripción/caption corta por álbum que el backend no expone
+     (`AlbumListItem`/`AlbumDetail` solo tienen `name`) — se omitió, sin
+     inventar un campo nuevo.
+   - `AlbumsController`/`*Api`/modelos: sin cambios, solo se leen métodos
+     que ya existían.
+
+`flutter analyze` → `No issues found!`. `flutter test` → **166/166**
+pasando (mismo total exacto — sin tests nuevos: `albums_list_screen.dart`
+seguía sin tener su propio archivo de widget tests antes de esta tarea
+también, y el comportamiento del controller que el nuevo menú "···"
+reutiliza ya está cubierto desde `albums_controller_test.dart`/
+`album_detail_screen_test.dart`). **No verificado en dispositivo real en
+este entorno**: el aspecto real de la card contenida del hero de Home, del
+grid con fotos reales de `AlbumsListScreen`, y el comportamiento táctil del
+menú "···"/diálogos — el usuario debe confirmarlos corriendo la app.
+
+## Mockup redesign: tabs inline + menú overflow del owner (sin spec de Kiro)
+
+Rediseño estructural de `album_detail_screen.dart` a partir de una nueva
+referencia visual del usuario (mockup, no en el repo). Cambios principales
+(detalle completo, incluidas decisiones no triviales, en `CLAUDE.md`):
+
+- El hero ganó una fila de metadata (conteo de fotos + fecha de creación,
+  formateada a mano en español — sin paquete nuevo) debajo del badge de rol.
+- El AppBar pasó de "1 ícono de personas + 3 íconos owner-only sueltos" a 3
+  círculos translúcidos: "Colaboradores" y "Compartir" (owner-only, este
+  último) cambian el tab activo; un menú "···" (owner-only) agrupa
+  Renombrar/Cambiar visibilidad/Eliminar álbum (mismos diálogos/lógica de
+  siempre).
+- El `showModalBottomSheet` de Compartir/Colaboradores se eliminó — ahora son
+  2 de 3 tabs pill inline debajo del hero ("Fotos"/"Colaboradores"/
+  "Compartir", nuevo componente reutilizable `MemoraSegmentedTabs` en
+  `lib/design/widgets/`), con "Fotos" como contenido por defecto.
+- El header de "Fotos" ahora tiene un control de orden funcional ("Más
+  recientes"/"Más antiguas") sobre `Photo.capturedAt`, puramente client-side
+  (nunca toca `AlbumsController`), con las fotos sin fecha siempre al final
+  de forma estable.
+
+Ningún controller/`*Api`/modelo cambió. `flutter analyze` → sin issues.
+`flutter test` → **168/168** (166 previos + 2 nuevos: orden de fotos y
+cambio de tab). No verificado en dispositivo real en este entorno.
+
+## Restyle de "Compartir"/"Colaboradores" según referencia `colaboradores.png` (sin spec de Kiro)
+
+Solo restyle visual del CONTENIDO de los tabs "Compartir"/"Colaboradores"
+(los tabs en sí, de la tarea anterior, se quedan igual) — pedido explícito
+del usuario ("las referencias visuales son para modificar la UI, no la
+lógica"). Detalle completo, incluidas decisiones no triviales marcadas para
+Kiro, en `CLAUDE.md`.
+
+- **"Compartir"**: header con subtítulo + un pill tappable de visibilidad
+  (🔒/🌐, misma acción `_changeVisibility` de siempre). El enlace de
+  compartición pasó a su propia card destacada, con un botón pill degradado
+  ("Obtener enlace") cuando no existe uno todavía. Los 3 botones sueltos
+  (Crear QR/Crear NFC/Programar NFC) pasaron a ser una fila de 4 accesos con
+  ícono circular + label separados por líneas verticales — el cuarto,
+  "Compartir en otras apps", es la única acción nueva (comparte el enlace del
+  álbum por el share sheet del sistema, obteniéndolo/creándolo primero si
+  hace falta — reutiliza los mismos métodos de siempre). Al final, un banner
+  oscuro "Comparte con solo un toque" (estilo Aurora, asset
+  `assets/images/nfc_icon.png` nuevo) que abre la programación de NFC.
+- **"Colaboradores"**: el avatar-stack superpuesto (círculos apilados) volvió
+  a ser una lista de filas completas — una fija para el usuario actual (con
+  su nombre/email real, ya disponible en la pantalla, y badge "Owner"), una
+  por cada otro colaborador (label genérico "Colaborador", ya que el backend
+  no expone su nombre/email — limitación real, documentada desde spec05) y
+  una por cada invitación pendiente (con su fecha de expiración; sin email,
+  porque a diferencia de lo que asumía el brief de esta tarea, el backend
+  tampoco guarda un email al crear una invitación — invitación por enlace,
+  no por correo).
+
+`flutter analyze` → sin issues. `flutter test` → **169/169** (168 previos +
+1 nuevo test de vista owner de ambos tabs). No verificado en dispositivo
+real en este entorno.
 
 ---
 

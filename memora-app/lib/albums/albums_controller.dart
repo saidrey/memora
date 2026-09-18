@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../api/api_exception.dart';
+import '../photos/photo_models.dart';
 import 'album_models.dart';
 import 'albums_api.dart';
 import 'collaborator_models.dart';
@@ -91,6 +94,41 @@ class AlbumsController extends ChangeNotifier {
   /// *different* album is opened (see `loadAlbumDetail`).
   List<NfcQrTag> nfcQrTags = [];
 
+  // --- Album-list cover photos (ajuste post-feedback, sin spec de Kiro) ---
+  //
+  // `AlbumListItem` (`GET /api/v1/albums`) carries no cover photo — the
+  // list endpoint was never meant to (see `album_card_style.dart`'s doc on
+  // the abstract-gradient cards it originally shipped with). The user asked
+  // twice, on a real device, to see actual photos "montadas" on each album
+  // card instead of an abstract stat card. Decision (accepted explicitly,
+  // marked for Kiro in CLAUDE.md): fetch a real cover per album via the
+  // EXISTING `AlbumsApi.getAlbumDetail` — one extra request per album with
+  // `photoCount > 0` (an accepted N+1 from the list screen), done lazily and
+  // non-blockingly after `loadAlbums()` returns, never before. Cached here
+  // in memory by album id (same "session cache, no disk, no expiry"
+  // criterion as `DriveThumbnailService`) so re-opening the list (or a
+  // pull-to-refresh that returns the same albums) doesn't refetch covers
+  // that already loaded.
+  final Map<String, List<Photo>> _albumCoverPhotos = {};
+
+  /// Album ids with a cover fetch currently in flight — prevents firing a
+  /// second `getAlbumDetail` for the same album if `loadAlbums()` is called
+  /// again (e.g. pull-to-refresh) before the first fetch finished.
+  final Set<String> _coverFetchesInFlight = {};
+
+  /// How many `getAlbumDetail` cover fetches run at once. Not a real
+  /// concurrency pool/queue (`Future.wait` over fixed-size chunks) —
+  /// deliberately simple for this app's typical album count (a handful to a
+  /// few dozen). If a future album count makes this too bursty, replace with
+  /// a real limiter (e.g. `package:pool`) instead of raising this number.
+  static const _coverFetchConcurrency = 4;
+
+  /// The (up to 3) first photos fetched for [albumId]'s card montage, or
+  /// `null` if none have loaded yet (still fetching, fetch failed, or the
+  /// album has no photos) — callers must keep showing the abstract
+  /// gradient/stat fallback in that case, never a broken/empty state.
+  List<Photo>? coverPhotosFor(String albumId) => _albumCoverPhotos[albumId];
+
   bool get isCurrentAlbumOwner => currentAlbumRole == AlbumRole.owner;
 
   Future<void> loadAlbums() async {
@@ -99,6 +137,10 @@ class AlbumsController extends ChangeNotifier {
     notifyListeners();
     try {
       albums = await _api.listAlbums();
+      // Deliberately not awaited: the list must render immediately with its
+      // abstract-card fallback, each card upgrading to a real photo montage
+      // whenever its cover arrives (see `_loadMissingCovers`'s doc above).
+      unawaited(_loadMissingCovers());
     } catch (error) {
       listErrorMessage = _messageFor(
         error,
@@ -106,6 +148,52 @@ class AlbumsController extends ChangeNotifier {
       );
     }
     isLoadingList = false;
+    notifyListeners();
+  }
+
+  /// Fetches the cover photos of every album that has photos but no cached
+  /// cover yet, in fixed-size concurrent chunks (see
+  /// `_coverFetchConcurrency`'s doc). Each album's fetch notifies listeners
+  /// on its own as soon as it resolves, so cards upgrade one by one instead
+  /// of waiting for the whole batch.
+  Future<void> _loadMissingCovers() async {
+    // Materialized eagerly (`.toList()`), not left as a lazy `Iterable`:
+    // `albums.where(...)` re-evaluates its predicate on every iteration, and
+    // that predicate reads `_coverFetchesInFlight` — iterating it a second
+    // time (e.g. for a `.toList()` below) AFTER already adding these same
+    // ids to `_coverFetchesInFlight` would filter every one of them right
+    // back out, leaving nothing to actually fetch.
+    final queue = albums
+        .where(
+          (album) =>
+              album.photoCount > 0 &&
+              !_albumCoverPhotos.containsKey(album.id) &&
+              !_coverFetchesInFlight.contains(album.id),
+        )
+        .toList();
+    if (queue.isEmpty) return;
+    _coverFetchesInFlight.addAll(queue.map((album) => album.id));
+
+    for (var i = 0; i < queue.length; i += _coverFetchConcurrency) {
+      final chunk = queue.skip(i).take(_coverFetchConcurrency);
+      await Future.wait(chunk.map(_loadCoverFor));
+    }
+  }
+
+  Future<void> _loadCoverFor(AlbumListItem item) async {
+    try {
+      final detail = await _api.getAlbumDetail(item.id);
+      if (detail.photos.isNotEmpty) {
+        _albumCoverPhotos[item.id] = detail.photos.take(3).toList();
+      }
+    } catch (_) {
+      // Silent by design: a failed cover fetch just leaves the card on its
+      // abstract-gradient fallback — this is a nice-to-have visual upgrade,
+      // not the list's primary load path (which already has its own
+      // error/retry UI via `listErrorMessage`).
+    } finally {
+      _coverFetchesInFlight.remove(item.id);
+    }
     notifyListeners();
   }
 

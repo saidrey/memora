@@ -44,6 +44,9 @@ dependencies:
   photo_view: ^0.15.0
   nfc_manager: ^4.2.1
   nfc_manager_ndef: ^1.1.0
+  google_fonts: ^8.2.1
+  flutter_animate: ^4.5.2
+  flutter_svg: ^2.1.0
 
 dev_dependencies:
   flutter_test:
@@ -71,6 +74,14 @@ flutter:
   # assets:
   #   - images/a_dot_burr.jpeg
   #   - images/a_dot_ham.jpeg
+  assets:
+    - assets/images/hero.png
+    - assets/images/empty.png
+    - assets/images/principal_asset.png
+    - assets/images/nfc_icon.png
+    - references/login_back.png
+    - references/login_logo.png
+    - references/google.svg
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
