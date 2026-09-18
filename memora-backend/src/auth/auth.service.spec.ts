@@ -117,7 +117,7 @@ describe('AuthService', () => {
     const { authService } = buildAuthService(buildFakeGoogleAuthClient());
     const { session } = await authService.loginWithGoogle(SENTINEL_CODE);
 
-    const refreshed = authService.refreshSession(session.refreshToken);
+    const refreshed = await authService.refreshSession(session.refreshToken);
 
     expect(refreshed.accessToken).toEqual(expect.any(String));
     expect(refreshed.refreshToken).toBe(session.refreshToken);
@@ -127,19 +127,19 @@ describe('AuthService', () => {
     const { authService } = buildAuthService(buildFakeGoogleAuthClient());
     const { session, user } = await authService.loginWithGoogle(SENTINEL_CODE);
 
-    authService.logout(user.id);
+    await authService.logout(user.id);
 
-    expect(() => authService.refreshSession(session.refreshToken)).toThrow(
-      ApiException,
-    );
+    await expect(
+      authService.refreshSession(session.refreshToken),
+    ).rejects.toThrow(ApiException);
   });
 
   it('rejects a malformed/garbage session refresh token', () => {
     const { authService } = buildAuthService(buildFakeGoogleAuthClient());
 
-    expect(() => authService.refreshSession('not-a-real-token')).toThrow(
-      ApiException,
-    );
+    return expect(
+      authService.refreshSession('not-a-real-token'),
+    ).rejects.toThrow(ApiException);
   });
 
   it('returns a Drive access token for a user with a stored Google refresh token', async () => {

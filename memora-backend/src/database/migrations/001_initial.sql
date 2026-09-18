@@ -1,0 +1,16 @@
+CREATE TABLE IF NOT EXISTS users (id uuid PRIMARY KEY, google_id text NOT NULL UNIQUE, email text NOT NULL, name text);
+CREATE TABLE IF NOT EXISTS albums (id uuid PRIMARY KEY, owner_id uuid NOT NULL REFERENCES users(id), name text NOT NULL, visibility text NOT NULL CHECK (visibility IN ('PRIVATE','PUBLIC')), created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL);
+CREATE INDEX IF NOT EXISTS albums_owner_id_idx ON albums(owner_id);
+CREATE TABLE IF NOT EXISTS photos (id uuid PRIMARY KEY, owner_id uuid NOT NULL REFERENCES users(id), storage_provider text NOT NULL, storage_file_id text NOT NULL, created_at timestamptz NOT NULL, captured_at timestamptz, width integer, height integer, mime_type text, size_bytes bigint, availability text NOT NULL CHECK (availability IN ('available','unavailable')), availability_checked_at timestamptz);
+CREATE INDEX IF NOT EXISTS photos_owner_id_idx ON photos(owner_id);
+CREATE TABLE IF NOT EXISTS album_photos (album_id uuid NOT NULL REFERENCES albums(id) ON DELETE CASCADE, photo_id uuid NOT NULL REFERENCES photos(id) ON DELETE CASCADE, PRIMARY KEY (album_id, photo_id));
+CREATE INDEX IF NOT EXISTS album_photos_photo_id_idx ON album_photos(photo_id);
+CREATE TABLE IF NOT EXISTS memberships (album_id uuid NOT NULL REFERENCES albums(id) ON DELETE CASCADE, user_id uuid NOT NULL REFERENCES users(id), joined_at timestamptz NOT NULL, PRIMARY KEY (album_id, user_id));
+CREATE INDEX IF NOT EXISTS memberships_user_id_idx ON memberships(user_id);
+CREATE TABLE IF NOT EXISTS invitations (id uuid PRIMARY KEY, album_id uuid NOT NULL REFERENCES albums(id) ON DELETE CASCADE, token text NOT NULL UNIQUE, created_by uuid NOT NULL REFERENCES users(id), status text NOT NULL CHECK (status IN ('pending','accepted','revoked','expired')), expires_at timestamptz NOT NULL, accepted_by_user_id uuid REFERENCES users(id), created_at timestamptz NOT NULL);
+CREATE INDEX IF NOT EXISTS invitations_album_id_idx ON invitations(album_id);
+CREATE TABLE IF NOT EXISTS share_links (id uuid PRIMARY KEY, album_id uuid NOT NULL UNIQUE REFERENCES albums(id) ON DELETE CASCADE, token text NOT NULL UNIQUE, status text NOT NULL CHECK (status IN ('active','revoked')), created_at timestamptz NOT NULL);
+CREATE TABLE IF NOT EXISTS nfc_qr_tags (id uuid PRIMARY KEY, album_id uuid NOT NULL REFERENCES albums(id) ON DELETE CASCADE, type text NOT NULL CHECK (type IN ('NFC','QR')), token text NOT NULL UNIQUE, status text NOT NULL CHECK (status IN ('enabled','disabled')), created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, disabled_at timestamptz);
+CREATE TABLE IF NOT EXISTS refresh_tokens (user_id uuid PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, ciphertext text NOT NULL, nonce text NOT NULL, auth_tag text NOT NULL, updated_at timestamptz NOT NULL);
+CREATE TABLE IF NOT EXISTS session_jtis (user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE, jti uuid NOT NULL, created_at timestamptz NOT NULL, PRIMARY KEY (user_id, jti));
+CREATE INDEX IF NOT EXISTS session_jtis_jti_idx ON session_jtis(jti);

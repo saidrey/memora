@@ -6,6 +6,25 @@
 
 ## Contrato base de la API
 
+## Persistencia PostgreSQL (spec12)
+
+La aplicación usa Kysely + `pg` contra `DATABASE_URL_POOLED` (en Neon, la URL
+pooled con `sslmode=require`). Si no existe, usa `DATABASE_URL`. Las
+migraciones son explícitas y usan `DATABASE_DIRECT_URL` cuando está definido;
+si no, usan `DATABASE_URL` (la URL directa):
+
+```sh
+npm run db:migrate
+npm run db:rollback
+```
+
+`TOKEN_ENCRYPTION_KEY` es obligatoria para el provider de producción de tokens:
+debe decodificar exactamente 32 bytes en base64 o hex y se usa AES-256-GCM con
+nonce por registro. Neon puede suspender el compute; la primera consulta tras
+auto-resume puede tener latencia adicional. Los unit y e2e usan los
+`InMemory*` en modo test y no requieren una base de datos; la integración SQL
+se ejecuta opcionalmente contra una PostgreSQL real.
+
 Implementa `specs/global/spec02-contrato-api.md` y
 `specs/memora-backend/spec01-fundacion-backend.md`.
 

@@ -8,6 +8,7 @@ import {
   GOOGLE_AUTH_CLIENT,
   GoogleAuthClient,
 } from './../src/auth/google-auth/google-auth-client.interface';
+import { withInMemoryPersistence } from './in-memory-persistence';
 
 const CODE_USER_A = 'code-user-a';
 const CODE_USER_B = 'code-user-b';
@@ -52,9 +53,9 @@ describe('Photos & Library (e2e)', () => {
   let tokenB: string;
 
   beforeAll(async () => {
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    })
+    const moduleFixture: TestingModule = await withInMemoryPersistence(
+      Test.createTestingModule({ imports: [AppModule] }),
+    )
       .overrideProvider(GOOGLE_AUTH_CLIENT)
       .useValue(buildFakeGoogleAuthClient())
       .compile();

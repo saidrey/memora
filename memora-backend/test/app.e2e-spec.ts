@@ -4,6 +4,7 @@ import * as request from 'supertest';
 import { AppModule } from './../src/app.module';
 import { configureApp } from './../src/bootstrap';
 import { REQUEST_ID_HEADER } from './../src/common/middleware/request-id.middleware';
+import { withInMemoryPersistence } from './in-memory-persistence';
 
 describe('Memora backend (e2e)', () => {
   let app: INestApplication;
@@ -12,9 +13,9 @@ describe('Memora backend (e2e)', () => {
   // specs/memora-backend/spec03-biblioteca-albumes.md / albums.e2e-spec.ts.
   // None of these tests mutate shared state, so reuse is safe.
   beforeAll(async () => {
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
+    const moduleFixture: TestingModule = await withInMemoryPersistence(
+      Test.createTestingModule({ imports: [AppModule] }),
+    ).compile();
 
     app = moduleFixture.createNestApplication();
     configureApp(app);

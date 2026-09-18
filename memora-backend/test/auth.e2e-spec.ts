@@ -8,6 +8,7 @@ import {
   GOOGLE_AUTH_CLIENT,
   GoogleAuthClient,
 } from './../src/auth/google-auth/google-auth-client.interface';
+import { withInMemoryPersistence } from './in-memory-persistence';
 
 const VALID_CODE = 'valid-server-auth-code';
 
@@ -37,9 +38,9 @@ describe('Auth (e2e)', () => {
   let app: INestApplication;
 
   beforeEach(async () => {
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    })
+    const moduleFixture: TestingModule = await withInMemoryPersistence(
+      Test.createTestingModule({ imports: [AppModule] }),
+    )
       .overrideProvider(GOOGLE_AUTH_CLIENT)
       .useValue(buildFakeGoogleAuthClient())
       .compile();

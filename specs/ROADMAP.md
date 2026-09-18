@@ -23,8 +23,9 @@
 | 9 | **M7 Compartir / Visor** | `memora-backend/spec09-compartir-visor.md` | ✅ PASS |
 | 10 | **M8 NFC/QR** (parte backend: asociar + resolución) | `memora-backend/spec10-nfc-qr.md` | ✅ PASS (with notes) |
 | 11 | A1.5 deuda backend: `SessionRegistry` → interfaz + mock | `memora-backend/spec11-session-registry-interface.md` | ✅ PASS |
+| 12 | **Persistencia PostgreSQL** (9 stores in-memory → Postgres/Neon, Kysely) | `memora-backend/spec12-persistencia-postgres.md` | 🟡 EN CURSO (spec APROBADA por el PO → pendiente de que Claude implemente y Kiro valide) |
 
-**✅ FASE 1 (BACKEND) CERRADA** (2026-09-14). Todos los ítems no diferidos están PASS; M5 ⏸️ diferida a post-MVP. **➡️ SIGUIENTE:** FASE 2 (app), que arranca cuando el PO lo indique — ítem **A** (M3 app: seleccionar/optimizar/subir fotos con `drive-token`).
+**🟡 FASE 1 (BACKEND) REABIERTA con el ítem 12** (persistencia Postgres, aprobado por el PO 2026-09-17). Los ítems 1–11 no diferidos están ✅ PASS; M5 ⏸️ diferida a post-MVP. El backend no es desplegable hasta cerrar el ítem 12 (hoy toda la persistencia es in-memory). **➡️ SIGUIENTE:** implementar spec12; FASE 2 (app) ya avanza en paralelo.
 
 > Cuando **todos** los ítems no diferidos de FASE 1 estén ✅ PASS, el PO decide pasar a FASE 2. M5 queda fuera del alcance del MVP hasta nueva decisión.
 

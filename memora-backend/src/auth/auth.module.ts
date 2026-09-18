@@ -7,27 +7,32 @@ import { GOOGLE_AUTH_CLIENT } from './google-auth/google-auth-client.interface';
 import { GoogleOAuthClient } from './google-auth/google-oauth.client';
 import { SessionAuthGuard } from './session/session-auth.guard';
 import { SESSION_REGISTRY } from './session/session-registry.interface';
-import { InMemorySessionRegistry } from './session/in-memory-session-registry';
 import { SessionTokenService } from './session/session-token.service';
 import { TOKEN_STORE } from './tokens/token-store.interface';
-import { InMemoryTokenStore } from './tokens/in-memory-token.store';
 import { USER_REPOSITORY } from './users/user-repository.interface';
-import { InMemoryUserRepository } from './users/in-memory-user.repository';
+import { PostgresUserRepository } from './users/postgres-user.repository';
+import { PostgresTokenStore } from './tokens/postgres-token.store';
+import { PostgresSessionRegistry } from './session/postgres-session-registry';
+import { DatabaseModule } from '../database/database.module';
 
 @Module({
   // isGlobal: true so other modules (e.g. AlbumsModule's InvitationsService,
   // spec05-colaboradores.md) can inject ConfigService without importing
   // ConfigModule themselves.
-  imports: [ConfigModule.forRoot({ isGlobal: true }), JwtModule.register({})],
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true }),
+    JwtModule.register({}),
+    DatabaseModule,
+  ],
   controllers: [AuthController],
   providers: [
     AuthService,
     SessionTokenService,
     SessionAuthGuard,
     { provide: GOOGLE_AUTH_CLIENT, useClass: GoogleOAuthClient },
-    { provide: USER_REPOSITORY, useClass: InMemoryUserRepository },
-    { provide: TOKEN_STORE, useClass: InMemoryTokenStore },
-    { provide: SESSION_REGISTRY, useClass: InMemorySessionRegistry },
+    { provide: USER_REPOSITORY, useClass: PostgresUserRepository },
+    { provide: TOKEN_STORE, useClass: PostgresTokenStore },
+    { provide: SESSION_REGISTRY, useClass: PostgresSessionRegistry },
   ],
   // SessionAuthGuard is reused by other modules (e.g. albums) to protect
   // their own endpoints with the same session check — its own dependency

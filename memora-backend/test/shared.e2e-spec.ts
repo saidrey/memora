@@ -8,6 +8,7 @@ import {
   GOOGLE_AUTH_CLIENT,
   GoogleAuthClient,
 } from './../src/auth/google-auth/google-auth-client.interface';
+import { withInMemoryPersistence } from './in-memory-persistence';
 
 const CODE_OWNER = 'code-owner-share';
 const CODE_OUTSIDER = 'code-outsider-share';
@@ -50,9 +51,9 @@ describe('Compartir y visor (e2e)', () => {
   let tokenOutsider: string;
 
   beforeAll(async () => {
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    })
+    const moduleFixture: TestingModule = await withInMemoryPersistence(
+      Test.createTestingModule({ imports: [AppModule] }),
+    )
       .overrideProvider(GOOGLE_AUTH_CLIENT)
       .useValue(buildFakeGoogleAuthClient())
       .compile();
@@ -173,9 +174,7 @@ describe('Compartir y visor (e2e)', () => {
           (p: { id: string }) => p.id === photo.body.id,
         ),
       ).toBe(true);
-      expect(response.body.photos[0].storageRef).toEqual(
-        photo.body.storageRef,
-      );
+      expect(response.body.photos[0].storageRef).toEqual(photo.body.storageRef);
     });
 
     it('P4: the public response never contains ownerId or any token', async () => {

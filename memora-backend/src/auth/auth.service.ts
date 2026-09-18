@@ -62,11 +62,14 @@ export class AuthService {
     // The Google refresh token never leaves the backend from here on.
     await this.tokenStore.saveGoogleRefreshToken(user.id, refreshToken);
 
-    return { session: this.issueSession(user.id), user: toPublicUser(user) };
+    return {
+      session: await this.issueSession(user.id),
+      user: toPublicUser(user),
+    };
   }
 
-  refreshSession(sessionRefreshToken: string): SessionTokenPair {
-    const payload = this.verifySessionRefreshToken(sessionRefreshToken);
+  async refreshSession(sessionRefreshToken: string): Promise<SessionTokenPair> {
+    const payload = await this.verifySessionRefreshToken(sessionRefreshToken);
     // No rotation for the MVP: the same refresh token stays valid until it
     // expires or logout revokes it. See README's security notes.
     return {
@@ -75,8 +78,8 @@ export class AuthService {
     };
   }
 
-  logout(userId: string): void {
-    this.sessionRegistry.revokeAll(userId);
+  async logout(userId: string): Promise<void> {
+    await this.sessionRegistry.revokeAll(userId);
   }
 
   async getDriveAccessToken(userId: string): Promise<DriveAccessToken> {
@@ -108,15 +111,15 @@ export class AuthService {
     }
   }
 
-  private issueSession(userId: string): SessionTokenPair {
+  private async issueSession(userId: string): Promise<SessionTokenPair> {
     const accessToken = this.sessionTokenService.issueAccessToken(userId);
     const { token: refreshToken, jti } =
       this.sessionTokenService.issueRefreshToken(userId);
-    this.sessionRegistry.register(userId, jti);
+    await this.sessionRegistry.register(userId, jti);
     return { accessToken, refreshToken };
   }
 
-  private verifySessionRefreshToken(sessionRefreshToken: string) {
+  private async verifySessionRefreshToken(sessionRefreshToken: string) {
     let payload;
     try {
       payload =
@@ -124,7 +127,7 @@ export class AuthService {
     } catch {
       throw sessionRefreshInvalid();
     }
-    if (!this.sessionRegistry.isActive(payload.sub, payload.jti)) {
+    if (!(await this.sessionRegistry.isActive(payload.sub, payload.jti))) {
       throw sessionRefreshInvalid();
     }
     return payload;

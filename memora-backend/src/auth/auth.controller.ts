@@ -29,9 +29,9 @@ export class AuthController {
   }
 
   @Post('refresh')
-  refresh(@Body() body: unknown) {
+  async refresh(@Body() body: unknown) {
     const sessionRefreshToken = requireStringField(body, 'sessionRefreshToken');
-    const session = this.authService.refreshSession(sessionRefreshToken);
+    const session = await this.authService.refreshSession(sessionRefreshToken);
 
     return {
       sessionAccessToken: session.accessToken,
@@ -42,8 +42,8 @@ export class AuthController {
   @Post('logout')
   @UseGuards(SessionAuthGuard)
   @HttpCode(HttpStatus.NO_CONTENT)
-  logout(@CurrentUser() user: { id: string }): void {
-    this.authService.logout(user.id);
+  async logout(@CurrentUser() user: { id: string }): Promise<void> {
+    await this.authService.logout(user.id);
   }
 
   @Post('drive-token')

@@ -7,17 +7,17 @@ import { SessionRegistry } from './session-registry.interface';
 export class InMemorySessionRegistry implements SessionRegistry {
   private readonly activeJtiByUser = new Map<string, Set<string>>();
 
-  register(userId: string, jti: string): void {
+  async register(userId: string, jti: string): Promise<void> {
     const jtis = this.activeJtiByUser.get(userId) ?? new Set<string>();
     jtis.add(jti);
     this.activeJtiByUser.set(userId, jtis);
   }
 
-  isActive(userId: string, jti: string): boolean {
+  async isActive(userId: string, jti: string): Promise<boolean> {
     return this.activeJtiByUser.get(userId)?.has(jti) ?? false;
   }
 
-  revokeAll(userId: string): void {
+  async revokeAll(userId: string): Promise<void> {
     this.activeJtiByUser.delete(userId);
   }
 }

@@ -15,11 +15,11 @@ export const SESSION_REGISTRY = Symbol('SESSION_REGISTRY');
  */
 export interface SessionRegistry {
   /** Marks a refresh-token jti as active for this user. Idempotent. */
-  register(userId: string, jti: string): void;
+  register(userId: string, jti: string): Promise<void>;
 
   /** Whether this jti is still an active refresh session for this user. */
-  isActive(userId: string, jti: string): boolean;
+  isActive(userId: string, jti: string): Promise<boolean>;
 
   /** Logout: revokes every active session refresh token for this user. */
-  revokeAll(userId: string): void;
+  revokeAll(userId: string): Promise<void>;
 }
