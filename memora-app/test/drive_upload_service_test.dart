@@ -123,5 +123,34 @@ void main() {
         throwsA(isA<DriveUploadException>()),
       );
     });
+
+    test(
+      'uses an explicit album parent without resolving the personal folder',
+      () async {
+        var requestCount = 0;
+        final client = MockClient((request) async {
+          requestCount++;
+          expect(request.url.path, '/upload/drive/v3/files');
+          final bodyText = utf8.decode(request.bodyBytes);
+          expect(bodyText, contains('"parents":["album-folder-1"]'));
+          return http.Response(
+            jsonEncode({'id': 'album-file-1'}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        });
+
+        final fileId = await DriveUploadService(httpClient: client).uploadFile(
+          accessToken: 'fake-token',
+          bytes: Uint8List.fromList([1]),
+          fileName: 'album.jpg',
+          mimeType: 'image/jpeg',
+          parentFolderId: 'album-folder-1',
+        );
+
+        expect(fileId, 'album-file-1');
+        expect(requestCount, 1);
+      },
+    );
   });
 }

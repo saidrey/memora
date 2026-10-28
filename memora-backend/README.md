@@ -6,6 +6,35 @@
 
 ## Contrato base de la API
 
+## Álbumes por carpeta (fase 1)
+
+Cada álbum crea una carpeta administrada por su owner antes de persistir el
+álbum. La respuesta autenticada del álbum incluye `driveFolderId` nullable y
+`uploadTarget: { provider: "google-drive", folderId }`; no incluye refresh
+tokens. `GET /api/v1/photos/upload-authorization/:albumId` devuelve el token
+efímero y el mismo folder target para que el cliente suba directamente, sin
+que Memora reciba bytes.
+
+La creación remota precede a la persistencia. Si persistir falla, se intenta
+eliminar la carpeta recién creada; si esa compensación falla se conserva el
+error original y puede quedar una carpeta vacía, pero nunca un álbum local sin
+carpeta. La migración `003_album_drive_folder.sql` es aditiva y segura para
+datos existentes.
+
+Al aceptar una invitación se obtiene el email desde `UserRepository`, se
+comparte la carpeta con rol `writer` y se guarda `drivePermissionId`. Si Drive
+falla, la membresía se revierte y la invitación no se acepta. Quitar o
+abandonar revoca ese permiso antes de borrar la membresía; membresías antiguas
+sin permission id fallan con `DRIVE_PERMISSION_MISSING` para permitir retry,
+no se silencian.
+
+La administración de carpetas usa Drive REST oficial y el access token
+efímero derivado del refresh token guardado por `AuthService`; nunca registra
+tokens ni bytes. Crear permisos sobre carpetas requiere revisar el scope
+OAuth: `drive.file` puede no bastar para administrar carpetas compartidas, y
+`https://www.googleapis.com/auth/drive` requiere reautorización explícita. No
+se cambia el scope automáticamente en esta fase.
+
 ## Persistencia PostgreSQL (spec12)
 
 La aplicación usa Kysely + `pg` contra `DATABASE_URL_POOLED` (en Neon, la URL

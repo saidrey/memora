@@ -36,6 +36,7 @@ export class GoogleOAuthClient implements GoogleAuthClient {
 
   async exchangeServerAuthCode(
     serverAuthCode: string,
+    redirectUri?: string,
   ): Promise<GoogleTokenExchangeResult> {
     let tokens: Credentials;
     try {
@@ -44,7 +45,10 @@ export class GoogleOAuthClient implements GoogleAuthClient {
       // client, not a web redirect. Passing 'postmessage' (the WEB flow's
       // value) causes redirect_uri_mismatch. So we exchange the code
       // without a redirect_uri for the native/offline flow.
-      ({ tokens } = await this.client.getToken({ code: serverAuthCode }));
+      ({ tokens } = await this.client.getToken({
+        code: serverAuthCode,
+        ...(redirectUri ? { redirect_uri: redirectUri } : {}),
+      }));
     } catch {
       throw googleAuthFailed(
         'No se pudo validar el inicio de sesión con Google',

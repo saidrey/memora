@@ -10,7 +10,7 @@ export class PostgresMembershipRepository implements MembershipRepository {
   async addCollaborator(albumId: string, userId: string) {
     const r = await this.db
       .insertInto('memberships')
-      .values({ album_id: albumId, user_id: userId, joined_at: new Date() })
+      .values({ album_id: albumId, user_id: userId, joined_at: new Date(), drive_permission_id: null })
       .onConflict((oc) => oc.columns(['album_id', 'user_id']).doNothing())
       .returningAll()
       .executeTakeFirst();
@@ -23,6 +23,13 @@ export class PostgresMembershipRepository implements MembershipRepository {
           .where('user_id', '=', userId)
           .executeTakeFirstOrThrow()),
     );
+  }
+  async setDrivePermissionId(albumId: string, userId: string, permissionId: string) {
+    const r = await this.db.updateTable('memberships')
+      .set({ drive_permission_id: permissionId })
+      .where('album_id', '=', albumId).where('user_id', '=', userId)
+      .returningAll().executeTakeFirstOrThrow();
+    return membership(r);
   }
   async findCollaborator(albumId: string, userId: string) {
     const r = await this.db

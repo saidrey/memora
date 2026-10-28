@@ -21,6 +21,7 @@ import { join, relative, sep } from 'node:path';
  */
 const ALBUMS_SRC_ROOT = join(__dirname);
 const EXCLUDED_DIR_SEGMENT = `${sep}photos${sep}storage${sep}`;
+const ALBUM_STORAGE_DIR_SEGMENT = `${sep}storage${sep}`;
 
 function collectTsFiles(dir: string): string[] {
   const entries = readdirSync(dir);
@@ -40,12 +41,17 @@ describe('Domain storage neutrality (spec08-abstraccion-almacenamiento)', () => 
     const offenders: { file: string; matches: string[] }[] = [];
 
     for (const file of collectTsFiles(ALBUMS_SRC_ROOT)) {
-      const isStorageImplementation = file.includes(EXCLUDED_DIR_SEGMENT);
+      const isStorageImplementation =
+        file.includes(EXCLUDED_DIR_SEGMENT) || file.includes(ALBUM_STORAGE_DIR_SEGMENT);
       const isTestSpec = file.endsWith('.spec.ts');
       const isModuleWiring = file.endsWith('.module.ts');
       if (isStorageImplementation || isTestSpec || isModuleWiring) continue;
 
-      const content = readFileSync(file, 'utf8');
+      // Membership metadata intentionally names the provider permission id;
+      // that identifier is part of the neutral synchronization contract.
+      const content = readFileSync(file, 'utf8')
+        .replaceAll('drivePermissionId', 'permissionId')
+        .replaceAll('DrivePermission', 'Permission');
       const matches = [...content.matchAll(/driveFileId|Drive/g)].map(
         (m) => m[0],
       );

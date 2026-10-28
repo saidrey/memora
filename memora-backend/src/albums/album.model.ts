@@ -15,6 +15,7 @@ export interface Album {
   ownerId: string;
   name: string;
   visibility: AlbumVisibility;
+  driveFolderId: string | null;
   createdAt: Date;
   updatedAt: Date;
 }

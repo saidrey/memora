@@ -26,6 +26,7 @@ export class InMemoryMembershipRepository implements MembershipRepository {
       userId,
       role: 'collaborator',
       joinedAt: new Date(),
+      drivePermissionId: `in-memory-${albumId}-${userId}`,
     };
     if (!this.collaboratorsByAlbumId.has(albumId)) {
       this.collaboratorsByAlbumId.set(albumId, new Map());
@@ -39,6 +40,14 @@ export class InMemoryMembershipRepository implements MembershipRepository {
     userId: string,
   ): Promise<AlbumMembership | null> {
     return this.collaboratorsByAlbumId.get(albumId)?.get(userId) ?? null;
+  }
+
+  async setDrivePermissionId(albumId: string, userId: string, permissionId: string) {
+    const membership = await this.findCollaborator(albumId, userId);
+    if (!membership) throw new Error(`Membership ${albumId}/${userId} not found`);
+    const updated = { ...membership, drivePermissionId: permissionId };
+    this.collaboratorsByAlbumId.get(albumId)!.set(userId, updated);
+    return updated;
   }
 
   async listCollaborators(albumId: string): Promise<AlbumMembership[]> {

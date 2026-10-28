@@ -14,6 +14,7 @@ export class InMemoryAlbumRepository implements AlbumRepository {
     ownerId: string;
     name: string;
     visibility?: AlbumVisibility;
+    driveFolderId?: string | null;
   }): Promise<Album> {
     const now = new Date();
     const album: Album = {
@@ -21,6 +22,7 @@ export class InMemoryAlbumRepository implements AlbumRepository {
       ownerId: input.ownerId,
       name: input.name,
       visibility: input.visibility ?? DEFAULT_VISIBILITY,
+      driveFolderId: input.driveFolderId ?? null,
       createdAt: now,
       updatedAt: now,
     };

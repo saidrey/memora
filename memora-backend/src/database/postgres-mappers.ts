@@ -20,6 +20,7 @@ export const album = (r: AlbumsTable): Album => ({
   ownerId: r.owner_id,
   name: r.name,
   visibility: r.visibility as Album['visibility'],
+  driveFolderId: r.drive_folder_id,
   createdAt: new Date(r.created_at),
   updatedAt: new Date(r.updated_at),
 });
@@ -46,6 +47,8 @@ export const membership = (r: MembershipsTable): AlbumMembership => ({
   userId: r.user_id,
   role: 'collaborator',
   joinedAt: new Date(r.joined_at),
+  ...(r.drive_permission_id ? { drivePermissionId: r.drive_permission_id } : {}),
+  ...(r.drive_permission_id ? { drivePermissionId: r.drive_permission_id } : {}),
 });
 export const invitation = (r: InvitationsTable): Invitation => ({
   id: r.id,

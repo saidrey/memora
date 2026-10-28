@@ -12,6 +12,7 @@ export class PostgresAlbumRepository implements AlbumRepository {
     ownerId: string;
     name: string;
     visibility?: AlbumVisibility;
+    driveFolderId?: string | null;
   }): Promise<Album> {
     const now = new Date();
     const row = await this.db
@@ -21,6 +22,7 @@ export class PostgresAlbumRepository implements AlbumRepository {
         owner_id: i.ownerId,
         name: i.name,
         visibility: i.visibility ?? 'PRIVATE',
+        drive_folder_id: i.driveFolderId ?? null,
         created_at: now,
         updated_at: now,
       })

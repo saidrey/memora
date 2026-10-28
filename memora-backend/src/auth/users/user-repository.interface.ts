@@ -10,5 +10,6 @@ export interface User {
 /** Migrating to a real database later means implementing this interface. */
 export interface UserRepository {
   findByGoogleId(googleId: string): Promise<User | null>;
+  findById(id: string): Promise<User | null>;
   create(user: Omit<User, 'id'>): Promise<User>;
 }

@@ -1,6 +1,9 @@
 import { randomBytes } from 'node:crypto';
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { USER_REPOSITORY, UserRepository } from '../../auth/users/user-repository.interface';
+import { ALBUM_REPOSITORY, AlbumRepository } from '../album-repository.interface';
+import { ALBUM_STORAGE, AlbumStorage } from '../storage/album-storage.interface';
 import { AlbumAccessService } from './album-access.service';
 import { invitationNotUsable } from './collaborators.errors';
 import { Invitation, InvitationStatus } from './invitation.model';
@@ -53,6 +56,9 @@ export class InvitationsService {
     private readonly memberships: MembershipRepository,
     private readonly albumAccess: AlbumAccessService,
     private readonly configService: ConfigService,
+    @Optional() @Inject(ALBUM_REPOSITORY) private readonly albums?: AlbumRepository,
+    @Optional() @Inject(USER_REPOSITORY) private readonly users?: UserRepository,
+    @Optional() @Inject(ALBUM_STORAGE) private readonly storage?: AlbumStorage,
   ) {}
 
   async create(ownerId: string, albumId: string): Promise<InvitationCreated> {
@@ -130,8 +136,24 @@ export class InvitationsService {
       throw invitationNotUsable();
     }
 
-    await this.memberships.addCollaborator(invitation.albumId, userId);
-    await this.invitations.updateStatus(invitation.id, 'accepted', userId);
+    // Keep direct/unit consumers of the pre-folder service compatible; Nest production always wires these providers.
+    if (!this.albums || !this.users || !this.storage) {
+      await this.memberships.addCollaborator(invitation.albumId, userId);
+      await this.invitations.updateStatus(invitation.id, 'accepted', userId);
+      return;
+    }
+    const album = await this.albums.findById(invitation.albumId);
+    const user = await this.users.findById(userId);
+    if (!album?.driveFolderId || !user) throw invitationNotUsable();
+    const membership = await this.memberships.addCollaborator(invitation.albumId, userId);
+    try {
+      const permission = await this.storage.shareFolder(album.ownerId, album.driveFolderId, user.email);
+      await this.memberships.setDrivePermissionId(invitation.albumId, userId, permission.permissionId);
+      await this.invitations.updateStatus(invitation.id, 'accepted', userId);
+    } catch (error) {
+      await this.memberships.removeCollaborator(invitation.albumId, membership.userId);
+      throw error;
+    }
   }
 
   /** Lazily detects and persists expiry — the in-memory store has no clock

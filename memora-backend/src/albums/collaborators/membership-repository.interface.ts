@@ -11,6 +11,7 @@ export const MEMBERSHIP_REPOSITORY = Symbol('MEMBERSHIP_REPOSITORY');
 export interface MembershipRepository {
   /** Idempotent: adding the same collaborator twice keeps the original joinedAt. */
   addCollaborator(albumId: string, userId: string): Promise<AlbumMembership>;
+  setDrivePermissionId(albumId: string, userId: string, permissionId: string): Promise<AlbumMembership>;
   findCollaborator(
     albumId: string,
     userId: string,

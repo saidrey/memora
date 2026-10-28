@@ -12,6 +12,10 @@ export class InMemoryUserRepository implements UserRepository {
     return id ? (this.usersById.get(id) ?? null) : null;
   }
 
+  async findById(id: string): Promise<User | null> {
+    return this.usersById.get(id) ?? null;
+  }
+
   async create(user: Omit<User, 'id'>): Promise<User> {
     const created: User = { id: randomUUID(), ...user };
     this.usersById.set(created.id, created);

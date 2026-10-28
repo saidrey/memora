@@ -80,6 +80,8 @@ class PhotoUploadController extends ChangeNotifier {
   String? batchErrorMessage;
 
   DriveToken? _driveToken;
+  AlbumUploadAuthorization? _albumUploadAuthorization;
+  String? _albumUploadAuthorizationAlbumId;
 
   /// True once a `DRIVE_REAUTHORIZATION_REQUIRED` has been seen in the
   /// current batch: short-circuits any further token requests for the rest
@@ -131,6 +133,8 @@ class PhotoUploadController extends ChangeNotifier {
     // Discard the batch's Drive token once the batch is done — it's never
     // held onto beyond what's needed to finish in-flight uploads.
     _driveToken = null;
+    _albumUploadAuthorization = null;
+    _albumUploadAuthorizationAlbumId = null;
     notifyListeners();
   }
 
@@ -168,6 +172,8 @@ class PhotoUploadController extends ChangeNotifier {
 
     isRunning = false;
     _driveToken = null;
+    _albumUploadAuthorization = null;
+    _albumUploadAuthorizationAlbumId = null;
     notifyListeners();
   }
 
@@ -180,12 +186,17 @@ class PhotoUploadController extends ChangeNotifier {
 
       item.status = PhotoUploadStatus.uploading;
       notifyListeners();
-      final token = await _ensureDriveToken();
+      final authorization = albumId == null
+          ? null
+          : await _ensureAlbumUploadAuthorization(albumId);
+      final token =
+          authorization?.accessToken ?? (await _ensureDriveToken()).accessToken;
       final fileId = await driveUploadService.uploadFile(
-        accessToken: token.accessToken,
+        accessToken: token,
         bytes: optimized.bytes,
         fileName: '${DateTime.now().microsecondsSinceEpoch}.jpg',
         mimeType: 'image/jpeg',
+        parentFolderId: authorization?.folderId,
       );
 
       item.status = PhotoUploadStatus.registering;
@@ -214,9 +225,12 @@ class PhotoUploadController extends ChangeNotifier {
       // known, out-of-scope gap: no automatic refresh yet) — surfaced
       // distinctly so the user knows to log back in, instead of the
       // generic message.
-      item.errorMessage = error is ApiException && error.statusCode == 401
-          ? _sessionExpiredMessage
-          : 'No se pudo subir esta foto. Intenta de nuevo.';
+      item.errorMessage = _messageForError(error);
+      if (error is ApiException && error.code == 'ALBUM_STORAGE_FAILED') {
+        batchErrorMessage = _albumStorageFailedMessage;
+      } else if (_isAlbumNotFound(error)) {
+        batchErrorMessage = _albumNotFoundMessage;
+      }
     }
   }
 
@@ -231,8 +245,46 @@ class PhotoUploadController extends ChangeNotifier {
     return token;
   }
 
+  Future<AlbumUploadAuthorization> _ensureAlbumUploadAuthorization(
+    String albumId,
+  ) async {
+    if (_driveReauthorizationRequired) {
+      throw const DriveReauthorizationRequiredException();
+    }
+    final cached = _albumUploadAuthorization;
+    if (cached != null &&
+        _albumUploadAuthorizationAlbumId == albumId &&
+        !cached.isExpired) {
+      return cached;
+    }
+    final authorization = await driveTokenApi.getAlbumUploadAuthorization(
+      albumId,
+    );
+    _albumUploadAuthorizationAlbumId = albumId;
+    _albumUploadAuthorization = authorization;
+    return authorization;
+  }
+
+  String _messageForError(Object error) {
+    if (error is ApiException && error.statusCode == 401) {
+      return _sessionExpiredMessage;
+    }
+    if (error is ApiException && error.code == 'ALBUM_STORAGE_FAILED') {
+      return _albumStorageFailedMessage;
+    }
+    if (_isAlbumNotFound(error)) return _albumNotFoundMessage;
+    return 'No se pudo subir esta foto. Intenta de nuevo.';
+  }
+
+  bool _isAlbumNotFound(Object error) =>
+      error is ApiException &&
+      (error.statusCode == 404 || error.code == 'NOT_FOUND');
+
   static const _reauthorizationMessage =
       'Hace falta reconectar Google Drive para poder subir fotos.';
   static const _sessionExpiredMessage =
       'Tu sesión expiró. Vuelve a iniciar sesión.';
+  static const _albumStorageFailedMessage =
+      'No se pudo preparar el almacenamiento del álbum.';
+  static const _albumNotFoundMessage = 'Este álbum no está disponible.';
 }

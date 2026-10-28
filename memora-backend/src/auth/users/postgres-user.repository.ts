@@ -15,6 +15,10 @@ export class PostgresUserRepository implements UserRepository {
       .executeTakeFirst();
     return r ? mapUser(r) : null;
   }
+  async findById(id: string) {
+    const r = await this.db.selectFrom('users').selectAll().where('id', '=', id).executeTakeFirst();
+    return r ? mapUser(r) : null;
+  }
   async create(i: Omit<User, 'id'>) {
     const r = await this.db
       .insertInto('users')

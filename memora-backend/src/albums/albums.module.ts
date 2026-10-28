@@ -34,6 +34,8 @@ import { PostgresMembershipRepository } from './collaborators/postgres-membershi
 import { PostgresInvitationRepository } from './collaborators/postgres-invitation.repository';
 import { PostgresShareLinkRepository } from './shared/postgres-share-link.repository';
 import { PostgresNfcQrTagRepository } from './nfc-qr/postgres-nfc-qr-tag.repository';
+import { ALBUM_STORAGE } from './storage/album-storage.interface';
+import { GoogleDriveAlbumStorage } from './storage/google-drive-album-storage';
 
 @Module({
   // ConfigModule is registered as global from AuthModule (isGlobal: true) —
@@ -76,6 +78,7 @@ import { PostgresNfcQrTagRepository } from './nfc-qr/postgres-nfc-qr-tag.reposit
       useClass: PostgresPhotoRepository,
     },
     { provide: PHOTO_STORAGE, useClass: GoogleDrivePhotoStorage },
+    { provide: ALBUM_STORAGE, useClass: GoogleDriveAlbumStorage },
     {
       provide: MEMBERSHIP_REPOSITORY,
       useClass: PostgresMembershipRepository,

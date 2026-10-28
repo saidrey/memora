@@ -46,9 +46,10 @@ export class AuthService {
 
   async loginWithGoogle(
     serverAuthCode: string,
+    redirectUri?: string,
   ): Promise<{ session: SessionTokenPair; user: PublicUser }> {
     const { refreshToken, identity } =
-      await this.exchangeServerAuthCode(serverAuthCode);
+      await this.exchangeServerAuthCode(serverAuthCode, redirectUri);
 
     let user = await this.userRepository.findByGoogleId(identity.googleId);
     if (!user) {
@@ -98,9 +99,15 @@ export class AuthService {
     }
   }
 
-  private async exchangeServerAuthCode(serverAuthCode: string) {
+  private async exchangeServerAuthCode(
+    serverAuthCode: string,
+    redirectUri?: string,
+  ) {
     try {
-      return await this.googleAuthClient.exchangeServerAuthCode(serverAuthCode);
+      return await this.googleAuthClient.exchangeServerAuthCode(
+        serverAuthCode,
+        redirectUri,
+      );
     } catch (error) {
       // Same defense-in-depth as getDriveAccessToken: don't trust every
       // GoogleAuthClient implementation to already throw ApiException.

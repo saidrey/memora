@@ -23,4 +23,5 @@ export interface AlbumMembership {
   userId: string;
   role: AlbumRole;
   joinedAt: Date;
+  drivePermissionId?: string;
 }

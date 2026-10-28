@@ -13,6 +13,22 @@ class DriveToken {
   bool get isExpired => !DateTime.now().isBefore(expiresAt);
 }
 
+/// Authorization scoped to an album's shared Drive folder. The token and
+/// folder id live only in memory for the upload operation.
+class AlbumUploadAuthorization {
+  const AlbumUploadAuthorization({
+    required this.accessToken,
+    required this.expiresAt,
+    required this.folderId,
+  });
+
+  final String accessToken;
+  final DateTime expiresAt;
+  final String folderId;
+
+  bool get isExpired => !DateTime.now().isBefore(expiresAt);
+}
+
 /// Thrown when memora-backend reports that the user's Google Drive
 /// authorization needs to be renewed (401 `DRIVE_REAUTHORIZATION_REQUIRED`).
 /// The actual re-authorization flow is `AuthController.reconnectDrive()`
@@ -47,6 +63,34 @@ class DriveTokenApi {
       return DriveToken(
         accessToken: accessToken,
         expiresAt: DateTime.now().add(ttl.isNegative ? Duration.zero : ttl),
+      );
+    } on ApiException catch (error) {
+      if (error.statusCode == 401 &&
+          error.code == 'DRIVE_REAUTHORIZATION_REQUIRED') {
+        throw const DriveReauthorizationRequiredException();
+      }
+      rethrow;
+    }
+  }
+
+  /// `GET /api/v1/photos/upload-authorization/:albumId`.
+  /// The backend resolves the folder from album membership; callers must not
+  /// send a folder id from the UI.
+  Future<AlbumUploadAuthorization> getAlbumUploadAuthorization(
+    String albumId,
+  ) async {
+    try {
+      final json = await _client.getJson(
+        '/photos/upload-authorization/$albumId',
+      );
+      final accessToken = json['accessToken'] as String;
+      final expiresInSeconds = json['expiresInSeconds'] as int;
+      final folderId = json['folderId'] as String;
+      final ttl = Duration(seconds: expiresInSeconds) - _expiryMargin;
+      return AlbumUploadAuthorization(
+        accessToken: accessToken,
+        expiresAt: DateTime.now().add(ttl.isNegative ? Duration.zero : ttl),
+        folderId: folderId,
       );
     } on ApiException catch (error) {
       if (error.statusCode == 401 &&

@@ -18,8 +18,9 @@ export class AuthController {
   @Post('google')
   async loginWithGoogle(@Body() body: unknown) {
     const serverAuthCode = requireStringField(body, 'serverAuthCode');
+    const redirectUri = readOptionalRedirectUri(body);
     const { session, user } =
-      await this.authService.loginWithGoogle(serverAuthCode);
+      await this.authService.loginWithGoogle(serverAuthCode, redirectUri);
 
     return {
       sessionAccessToken: session.accessToken,
@@ -55,4 +56,10 @@ export class AuthController {
       expiresIn: token.expiresInSeconds,
     };
   }
+}
+
+function readOptionalRedirectUri(body: unknown): string | undefined {
+  const value = (body as Record<string, unknown> | null)?.redirectUri;
+  if (value === undefined) return undefined;
+  return requireStringField(body, 'redirectUri');
 }

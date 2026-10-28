@@ -29,6 +29,24 @@ class _FakePhotoOptimizer extends PhotoOptimizer {
   }
 }
 
+class _RecordingDriveUploadService extends DriveUploadService {
+  _RecordingDriveUploadService();
+
+  String? parentFolderId;
+
+  @override
+  Future<String> uploadFile({
+    required String accessToken,
+    required Uint8List bytes,
+    required String fileName,
+    required String mimeType,
+    String? parentFolderId,
+  }) async {
+    this.parentFolderId = parentFolderId;
+    return 'drive-file-1';
+  }
+}
+
 XFile _fakeXFile(String name, {List<int> bytes = const [1, 2, 3]}) {
   return XFile.fromData(
     Uint8List.fromList(bytes),
@@ -85,6 +103,72 @@ http.Response _sessionExpired() => http.Response(
 
 void main() {
   group('PhotoUploadController.uploadPickedFiles', () {
+    test('uses album upload authorization and registers albumId', () async {
+      var authorizationCalls = 0;
+      var registerCalls = 0;
+      final apiClient = ApiClient(
+        httpClient: MockClient((request) async {
+          if (request.method == 'GET' &&
+              request.url.path.endsWith(
+                '/photos/upload-authorization/album-1',
+              )) {
+            authorizationCalls++;
+            return http.Response(
+              jsonEncode({
+                'provider': 'google-drive',
+                'accessToken': 'album-drive-token',
+                'expiresInSeconds': 3600,
+                'folderId': 'album-folder-1',
+              }),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          }
+          if (request.method == 'POST' &&
+              request.url.path.endsWith('/photos')) {
+            final body = jsonDecode(request.body) as Map<String, dynamic>;
+            registerCalls++;
+            expect(body['albumId'], 'album-1');
+            return http.Response(
+              jsonEncode({
+                'id': 'photo-1',
+                'albumId': 'album-1',
+                'storageRef': {
+                  'provider': 'google-drive',
+                  'fileId': 'drive-file-1',
+                },
+              }),
+              201,
+              headers: {'content-type': 'application/json'},
+            );
+          }
+          fail('Unexpected backend request: ${request.method} ${request.url}');
+        }),
+        baseUrl: 'http://localhost:3000/api/v1',
+      );
+      final driveUploadService = _RecordingDriveUploadService();
+      final controller = PhotoUploadController(
+        imagePicker: ImagePicker(),
+        photoOptimizer: const _FakePhotoOptimizer(),
+        driveTokenApi: DriveTokenApi(apiClient),
+        driveUploadService: driveUploadService,
+        photosApi: PhotosApi(apiClient),
+      );
+
+      await controller.uploadPickedFiles([
+        _fakeXFile('album.jpg'),
+      ], albumId: 'album-1');
+
+      expect(
+        controller.items.single.status,
+        PhotoUploadStatus.done,
+        reason: controller.items.single.errorMessage,
+      );
+      expect(authorizationCalls, 1);
+      expect(registerCalls, 1);
+      expect(driveUploadService.parentFolderId, 'album-folder-1');
+    });
+
     test(
       'processes every photo in sequence and reports a success summary',
       () async {
@@ -305,150 +389,154 @@ void main() {
   });
 
   group('PhotoUploadController.retryAfterDriveReconnect', () {
-    test('retries only the items that failed with '
-        'DRIVE_REAUTHORIZATION_REQUIRED, leaving already-done items alone',
-        () async {
-      // Photo 1's drive-token call succeeds but with a token that's already
-      // expired by the time photo 2 needs one (expiresIn: 0) — forcing a
-      // SECOND drive-token call within the same original batch, which is
-      // configured to fail with DRIVE_REAUTHORIZATION_REQUIRED. This is the
-      // only way to get one photo to `done` and a later one to the reauth
-      // error within a single batch, since the controller normally caches
-      // one token for the whole batch.
-      var driveTokenCalls = 0;
-      final apiClient = _backendClient(
-        onDriveToken: () {
-          driveTokenCalls++;
-          if (driveTokenCalls == 1) return _driveTokenOk(expiresIn: 0);
-          if (driveTokenCalls == 2) return _driveTokenReauthRequired();
-          // Third call onward: simulates the token obtained after a
-          // successful Drive reconnect.
-          return _driveTokenOk();
-        },
-        onRegisterPhoto: (body) => http.Response(
-          jsonEncode({
-            'id': 'photo-${(body['storageRef'] as Map)['fileId']}',
-            'storageRef': {
-              'provider': 'google-drive',
-              'fileId': (body['storageRef'] as Map)['fileId'],
-            },
-          }),
-          201,
-          headers: {'content-type': 'application/json'},
-        ),
-      );
-
-      var driveUploadCalls = 0;
-      final driveClient = MockClient((request) async {
-        if (request.method == 'GET') {
-          return http.Response(
-            jsonEncode({'files': <dynamic>[]}),
-            200,
+    test(
+      'retries only the items that failed with '
+      'DRIVE_REAUTHORIZATION_REQUIRED, leaving already-done items alone',
+      () async {
+        // Photo 1's drive-token call succeeds but with a token that's already
+        // expired by the time photo 2 needs one (expiresIn: 0) — forcing a
+        // SECOND drive-token call within the same original batch, which is
+        // configured to fail with DRIVE_REAUTHORIZATION_REQUIRED. This is the
+        // only way to get one photo to `done` and a later one to the reauth
+        // error within a single batch, since the controller normally caches
+        // one token for the whole batch.
+        var driveTokenCalls = 0;
+        final apiClient = _backendClient(
+          onDriveToken: () {
+            driveTokenCalls++;
+            if (driveTokenCalls == 1) return _driveTokenOk(expiresIn: 0);
+            if (driveTokenCalls == 2) return _driveTokenReauthRequired();
+            // Third call onward: simulates the token obtained after a
+            // successful Drive reconnect.
+            return _driveTokenOk();
+          },
+          onRegisterPhoto: (body) => http.Response(
+            jsonEncode({
+              'id': 'photo-${(body['storageRef'] as Map)['fileId']}',
+              'storageRef': {
+                'provider': 'google-drive',
+                'fileId': (body['storageRef'] as Map)['fileId'],
+              },
+            }),
+            201,
             headers: {'content-type': 'application/json'},
-          );
-        }
-        if (request.url.path == '/drive/v3/files') {
-          return http.Response(
-            jsonEncode({'id': 'memora-folder'}),
-            200,
-            headers: {'content-type': 'application/json'},
-          );
-        }
-        driveUploadCalls++;
-        return http.Response(
-          jsonEncode({'id': 'drive-file-$driveUploadCalls'}),
-          200,
-          headers: {'content-type': 'application/json'},
+          ),
         );
-      });
 
-      final controller = PhotoUploadController(
-        imagePicker: ImagePicker(),
-        photoOptimizer: const _FakePhotoOptimizer(),
-        driveTokenApi: DriveTokenApi(apiClient),
-        driveUploadService: DriveUploadService(httpClient: driveClient),
-        photosApi: PhotosApi(apiClient),
-      );
-
-      await controller.uploadPickedFiles([
-        _fakeXFile('a.jpg'),
-        _fakeXFile('b.jpg'),
-      ]);
-
-      expect(controller.items[0].status, PhotoUploadStatus.done);
-      expect(controller.items[1].status, PhotoUploadStatus.error);
-      expect(controller.items[1].failedDueToDriveReauth, isTrue);
-      expect(controller.hasDriveReauthFailures, isTrue);
-
-      // Simulate a successful reconnect: every subsequent drive-token call
-      // now succeeds.
-      await controller.retryAfterDriveReconnect();
-
-      expect(controller.items[0].status, PhotoUploadStatus.done);
-      expect(controller.items[1].status, PhotoUploadStatus.done);
-      expect(controller.items[1].failedDueToDriveReauth, isFalse);
-      expect(controller.hasDriveReauthFailures, isFalse);
-      expect(controller.isRunning, isFalse);
-      // The first (already-done) item's photo must be untouched/unchanged —
-      // retryAfterDriveReconnect never re-processes it.
-      expect(controller.items[0].photo?.id, isNotNull);
-    });
-
-    test('is a no-op when nothing failed due to Drive reauthorization',
-        () async {
-      final apiClient = _backendClient(
-        onDriveToken: () => _driveTokenOk(),
-        onRegisterPhoto: (body) => http.Response(
-          jsonEncode({
-            'id': 'photo-ok',
-            'storageRef': {
-              'provider': 'google-drive',
-              'fileId': (body['storageRef'] as Map)['fileId'],
-            },
-          }),
-          201,
-          headers: {'content-type': 'application/json'},
-        ),
-      );
-      final driveClient = MockClient((request) async {
-        if (request.method == 'GET') {
+        var driveUploadCalls = 0;
+        final driveClient = MockClient((request) async {
+          if (request.method == 'GET') {
+            return http.Response(
+              jsonEncode({'files': <dynamic>[]}),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          }
+          if (request.url.path == '/drive/v3/files') {
+            return http.Response(
+              jsonEncode({'id': 'memora-folder'}),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          }
+          driveUploadCalls++;
           return http.Response(
-            jsonEncode({'files': <dynamic>[]}),
+            jsonEncode({'id': 'drive-file-$driveUploadCalls'}),
             200,
             headers: {'content-type': 'application/json'},
           );
-        }
-        if (request.url.path == '/drive/v3/files') {
-          return http.Response(
-            jsonEncode({'id': 'memora-folder'}),
-            200,
-            headers: {'content-type': 'application/json'},
-          );
-        }
-        return http.Response(
-          jsonEncode({'id': 'drive-file'}),
-          200,
-          headers: {'content-type': 'application/json'},
+        });
+
+        final controller = PhotoUploadController(
+          imagePicker: ImagePicker(),
+          photoOptimizer: const _FakePhotoOptimizer(),
+          driveTokenApi: DriveTokenApi(apiClient),
+          driveUploadService: DriveUploadService(httpClient: driveClient),
+          photosApi: PhotosApi(apiClient),
         );
-      });
 
-      final controller = PhotoUploadController(
-        imagePicker: ImagePicker(),
-        photoOptimizer: const _FakePhotoOptimizer(),
-        driveTokenApi: DriveTokenApi(apiClient),
-        driveUploadService: DriveUploadService(httpClient: driveClient),
-        photosApi: PhotosApi(apiClient),
-      );
+        await controller.uploadPickedFiles([
+          _fakeXFile('a.jpg'),
+          _fakeXFile('b.jpg'),
+        ]);
 
-      await controller.uploadPickedFiles([_fakeXFile('a.jpg')]);
-      expect(controller.items.single.status, PhotoUploadStatus.done);
+        expect(controller.items[0].status, PhotoUploadStatus.done);
+        expect(controller.items[1].status, PhotoUploadStatus.error);
+        expect(controller.items[1].failedDueToDriveReauth, isTrue);
+        expect(controller.hasDriveReauthFailures, isTrue);
 
-      await controller.retryAfterDriveReconnect();
+        // Simulate a successful reconnect: every subsequent drive-token call
+        // now succeeds.
+        await controller.retryAfterDriveReconnect();
 
-      // Nothing re-processed: still just the one done item, unchanged.
-      expect(controller.items, hasLength(1));
-      expect(controller.items.single.status, PhotoUploadStatus.done);
-      expect(controller.isRunning, isFalse);
-    });
+        expect(controller.items[0].status, PhotoUploadStatus.done);
+        expect(controller.items[1].status, PhotoUploadStatus.done);
+        expect(controller.items[1].failedDueToDriveReauth, isFalse);
+        expect(controller.hasDriveReauthFailures, isFalse);
+        expect(controller.isRunning, isFalse);
+        // The first (already-done) item's photo must be untouched/unchanged —
+        // retryAfterDriveReconnect never re-processes it.
+        expect(controller.items[0].photo?.id, isNotNull);
+      },
+    );
+
+    test(
+      'is a no-op when nothing failed due to Drive reauthorization',
+      () async {
+        final apiClient = _backendClient(
+          onDriveToken: () => _driveTokenOk(),
+          onRegisterPhoto: (body) => http.Response(
+            jsonEncode({
+              'id': 'photo-ok',
+              'storageRef': {
+                'provider': 'google-drive',
+                'fileId': (body['storageRef'] as Map)['fileId'],
+              },
+            }),
+            201,
+            headers: {'content-type': 'application/json'},
+          ),
+        );
+        final driveClient = MockClient((request) async {
+          if (request.method == 'GET') {
+            return http.Response(
+              jsonEncode({'files': <dynamic>[]}),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          }
+          if (request.url.path == '/drive/v3/files') {
+            return http.Response(
+              jsonEncode({'id': 'memora-folder'}),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          }
+          return http.Response(
+            jsonEncode({'id': 'drive-file'}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        });
+
+        final controller = PhotoUploadController(
+          imagePicker: ImagePicker(),
+          photoOptimizer: const _FakePhotoOptimizer(),
+          driveTokenApi: DriveTokenApi(apiClient),
+          driveUploadService: DriveUploadService(httpClient: driveClient),
+          photosApi: PhotosApi(apiClient),
+        );
+
+        await controller.uploadPickedFiles([_fakeXFile('a.jpg')]);
+        expect(controller.items.single.status, PhotoUploadStatus.done);
+
+        await controller.retryAfterDriveReconnect();
+
+        // Nothing re-processed: still just the one done item, unchanged.
+        expect(controller.items, hasLength(1));
+        expect(controller.items.single.status, PhotoUploadStatus.done);
+        expect(controller.isRunning, isFalse);
+      },
+    );
   });
 }

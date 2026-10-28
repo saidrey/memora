@@ -9,6 +9,9 @@ import { requestIdMiddleware } from './common/middleware/request-id.middleware';
  */
 export function configureApp(app: INestApplication): void {
   app.use(requestIdMiddleware);
+  app.enableCors({
+    origin: process.env.APP_WEB_ORIGIN ?? 'http://localhost:3001',
+  });
 
   // Unversioned health probe for infrastructure (load balancers, uptime
   // checks), per the updated spec01-fundacion-backend.md. Registered on the

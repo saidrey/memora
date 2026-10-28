@@ -16,6 +16,7 @@ export interface AlbumRepository {
     ownerId: string;
     name: string;
     visibility?: AlbumVisibility;
+    driveFolderId?: string | null;
   }): Promise<Album>;
   findById(id: string): Promise<Album | null>;
   findByOwner(ownerId: string): Promise<Album[]>;

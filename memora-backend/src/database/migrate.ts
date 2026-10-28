@@ -17,16 +17,18 @@ async function main() {
     await client.query(
       'CREATE TABLE IF NOT EXISTS schema_migrations (version text PRIMARY KEY, applied_at timestamptz NOT NULL)',
     );
-    const version = '001_initial';
-    const applied = await client.query(
-      'SELECT 1 FROM schema_migrations WHERE version = $1',
-      [version],
-    );
-    if (applied.rowCount === 0) {
-      await client.query('BEGIN');
-      await client.query(
-        await readFile(join(__dirname, 'migrations/001_initial.sql'), 'utf8'),
+    const migrations = [
+      ['001_initial', 'migrations/001_initial.sql'],
+      ['003_album_drive_folder', 'migrations/003_album_drive_folder.sql'],
+    ] as const;
+    for (const [version, file] of migrations) {
+      const applied = await client.query(
+        'SELECT 1 FROM schema_migrations WHERE version = $1',
+        [version],
       );
+      if (applied.rowCount !== 0) continue;
+      await client.query('BEGIN');
+      await client.query(await readFile(join(__dirname, file), 'utf8'));
       await client.query(
         'INSERT INTO schema_migrations(version, applied_at) VALUES ($1, NOW())',
         [version],

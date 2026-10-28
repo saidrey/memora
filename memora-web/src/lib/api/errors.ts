@@ -19,3 +19,13 @@ export class ApiError extends Error {
     this.requestId = body.requestId;
   }
 }
+
+export function userFacingError(error: unknown, fallback = 'No se pudo completar la operación.'): string {
+  if (!(error instanceof ApiError)) return fallback;
+  if (error.code === 'NOT_FOUND') return 'Este álbum no está disponible.';
+  if (error.code === 'INVITATION_NOT_USABLE') return 'Esta invitación ya no está disponible.';
+  if (error.code === 'DRIVE_REAUTHORIZATION_REQUIRED') return 'Vuelve a conectar Google Drive para ver estas fotos.';
+  if (error.code === 'GOOGLE_AUTH_FAILED') return 'Google no pudo validar este inicio de sesión. Revisa que el Client ID y el secreto correspondan al mismo cliente OAuth.';
+  if (error.code === 'SESSION_REFRESH_INVALID' || error.status === 401) return 'Tu sesión expiró. Vuelve a iniciar sesión.';
+  return error.message || fallback;
+}

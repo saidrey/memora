@@ -112,6 +112,8 @@ describe('Albums (e2e)', () => {
         id: expect.any(String),
         name,
         visibility: 'PRIVATE',
+        driveFolderId: expect.any(String),
+        uploadTarget: { provider: 'google-drive', folderId: expect.any(String) },
         photoCount: 0,
         createdAt: expect.any(String),
         updatedAt: expect.any(String),

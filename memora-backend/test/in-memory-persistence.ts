@@ -17,6 +17,18 @@ import { TOKEN_STORE } from '../src/auth/tokens/token-store.interface';
 import { InMemoryTokenStore } from '../src/auth/tokens/in-memory-token.store';
 import { USER_REPOSITORY } from '../src/auth/users/user-repository.interface';
 import { InMemoryUserRepository } from '../src/auth/users/in-memory-user.repository';
+import { ALBUM_STORAGE } from '../src/albums/storage/album-storage.interface';
+
+class InMemoryAlbumStorage {
+  private nextId = 0;
+  async createFolder() { return { folderId: `folder-${++this.nextId}` }; }
+  async deleteFolder() {}
+  async shareFolder() { return { permissionId: `permission-${++this.nextId}` }; }
+  async revokeFolderPermission() {}
+  async getUploadAuthorization(_userId: string, folderId: string) {
+    return { provider: 'google-drive' as const, accessToken: 'test-access-token', expiresInSeconds: 3600, folderId };
+  }
+}
 
 /** Keeps e2e tests independent from a real database. */
 export function withInMemoryPersistence(
@@ -40,5 +52,7 @@ export function withInMemoryPersistence(
     .overrideProvider(TOKEN_STORE)
     .useClass(InMemoryTokenStore)
     .overrideProvider(SESSION_REGISTRY)
-    .useClass(InMemorySessionRegistry);
+    .useClass(InMemorySessionRegistry)
+    .overrideProvider(ALBUM_STORAGE)
+    .useClass(InMemoryAlbumStorage);
 }

@@ -102,8 +102,12 @@ nunca ve los bytes) y registra cada foto con `POST /api/v1/photos`. `lib/photos/
   /api/v1/auth/drive-token` vía `ApiClient` (Bearer de sesión ya adjunto) →
   `DriveToken { accessToken, expiresAt }`. Un 401
   `DRIVE_REAUTHORIZATION_REQUIRED` se mapea a
-  `DriveReauthorizationRequiredException` (nunca se propaga el
-  `ApiException` genérico a la UI).
+ `DriveReauthorizationRequiredException` (nunca se propaga el
+ `ApiException` genérico a la UI).
+  Para álbumes, `DriveTokenApi.getAlbumUploadAuthorization(albumId)` usa
+  `GET /api/v1/photos/upload-authorization/:albumId` y devuelve el token de
+  vida corta junto a `folderId`; el backend resuelve ese folder por
+  membership y la app nunca lo recibe de la UI ni lo envía de vuelta.
 - **`drive_upload_service.dart`** — `DriveUploadService.uploadFile(...)`:
   sube los bytes optimizados directo a Google Drive (API v3, `files.create`
   multipart) usando `package:http` **directamente contra
@@ -111,10 +115,11 @@ nunca ve los bytes) y registra cada foto con `POST /api/v1/photos`. `lib/photos/
   `ApiClient`", porque Drive es otro host con su propio token
   (`driveAccessToken`, scope `drive.file`) que nunca debe llegar al backend.
   No se agrega el SDK de Google Drive (spec01: aislamiento de proveedores).
-  Resuelve/crea la carpeta única "Memora" en "Mi unidad" (decisión 1:
-  búsqueda por `name + mimeType folder + trashed=false`, si no existe se
-  crea) y cachea su `fileId` en la instancia — vive más allá de un solo lote
-  (la carpeta no cambia durante la sesión), pero nunca se persiste en disco.
+  Para biblioteca personal resuelve/crea la carpeta única "Memora" en "Mi
+  unidad" y cachea su `fileId` en la instancia. Para álbumes recibe el
+  `folderId` de la autorización folder-scoped y lo usa directamente como
+  `parents: [folderId]`, sin buscar ni crear la carpeta personal. Ningún id
+  de folder se persiste en disco.
 - **`photos_api.dart`** — `PhotosApi.registerPhoto(...)`: `POST
   /api/v1/photos` vía `ApiClient` con `storageRef: { fileId }` (**nunca**
   `driveFileId`; `provider` se omite, el backend asume `'google-drive'`) +
@@ -124,10 +129,12 @@ nunca ve los bytes) y registra cada foto con `POST /api/v1/photos`. `lib/photos/
 - **`photo_upload_controller.dart`** — `PhotoUploadController`
   (`ChangeNotifier`, patrón de `AuthController`): orquesta el lote
   (decisión 4) — N fotos **en secuencia** (no paralelo), cada una
-  optimizar → token de Drive (una vez por lote, renovado si expira según
-  `expiresIn`) → subir a Drive → registrar en backend, con estado por foto
+  optimizar → autorización de Drive (una vez por lote; folder-scoped si hay
+  álbum, personal si no) → subir a Drive → registrar en backend, con estado por foto
   (`queued/optimizing/uploading/registering/done/error`) y errores
-  parciales: una foto que falla no detiene ni corrompe el resto del lote.
+  parciales: una foto que falla no detiene ni corrompe el resto del lote. En
+  álbumes cada registro incluye `albumId`; el backend conserva el ownership
+  de la foto en el colaborador que la aportó.
   Si el backend responde `DRIVE_REAUTHORIZATION_REQUIRED`, marca la(s)
   foto(s) afectada(s) como error con un mensaje claro ("hace falta
   reconectar Google Drive") y deja de pedir tokens nuevos por el resto del
@@ -225,8 +232,8 @@ lista → detalle → crear.
   cacheado — decisión explícita: los dos tienen ciclos de vida distintos
   (un lote de subida es corto y descarta su caché al terminar; la pantalla
   de detalle sigue pidiendo miniaturas mientras esté abierta) y
-  `POST /auth/drive-token` es barato e idempotente, así que la rara
-  coincidencia de pedir token dos veces al mismo tiempo es un costo
+  `POST /auth/drive-token` sigue siendo barato e idempotente para miniaturas y
+  biblioteca personal, así que la rara coincidencia de pedir token dos veces al mismo tiempo es un costo
   aceptable por no acoplar ambos controllers con estado mutable
   compartido.
 - **`lib/albums/screens/albums_list_screen.dart`**,

@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Delete,
+  Get,
   HttpCode,
   HttpStatus,
   Param,
@@ -29,6 +30,11 @@ export class PhotosController {
   create(@CurrentUser() user: { id: string }, @Body() body: unknown) {
     const input = parseRegisterPhotoInput(body);
     return this.photosService.register(user.id, input);
+  }
+
+  @Get('upload-authorization/:albumId')
+  getUploadAuthorization(@CurrentUser() user: { id: string }, @Param('albumId') albumId: string) {
+    return this.photosService.getUploadAuthorization(user.id, albumId);
   }
 
   @Delete(':photoId')

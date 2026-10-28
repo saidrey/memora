@@ -11,6 +11,7 @@ export interface AlbumsTable {
   owner_id: string;
   name: string;
   visibility: string;
+  drive_folder_id: string | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -36,6 +37,7 @@ export interface MembershipsTable {
   album_id: string;
   user_id: string;
   joined_at: Date;
+  drive_permission_id: string | null;
 }
 export interface InvitationsTable {
   id: string;

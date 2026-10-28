@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import { Album, AlbumVisibility } from './album.model';
 import {
   ALBUM_REPOSITORY,
@@ -27,6 +27,7 @@ import {
   NFC_QR_TAG_REPOSITORY,
   NfcQrTagRepository,
 } from './nfc-qr/nfc-qr-tag-repository.interface';
+import { ALBUM_STORAGE, AlbumStorage, NoopAlbumStorage } from './storage/album-storage.interface';
 
 export interface AlbumSummary {
   id: string;
@@ -35,6 +36,8 @@ export interface AlbumSummary {
   photoCount: number;
   createdAt: Date;
   updatedAt: Date;
+  driveFolderId?: string | null;
+  uploadTarget?: { provider: 'google-drive'; folderId: string } | null;
 }
 
 /** PATCH /albums/:id body (spec09): both fields optional, but at least one
@@ -69,6 +72,7 @@ export class AlbumsService {
     @Inject(NFC_QR_TAG_REPOSITORY)
     private readonly nfcQrTags: NfcQrTagRepository,
     private readonly albumAccess: AlbumAccessService,
+    @Optional() @Inject(ALBUM_STORAGE) private readonly storage: AlbumStorage = new NoopAlbumStorage(),
   ) {}
 
   /** `visibility` optional (D17) — the repository defaults it to `PRIVATE`
@@ -78,7 +82,14 @@ export class AlbumsService {
     name: string,
     visibility?: AlbumVisibility,
   ): Promise<AlbumSummary> {
-    const album = await this.albums.create({ ownerId, name, visibility });
+    const folder = await this.storage.createFolder(ownerId, name);
+    let album: Album;
+    try {
+      album = await this.albums.create({ ownerId, name, visibility, driveFolderId: folder.folderId || null });
+    } catch (error) {
+      try { await this.storage.deleteFolder(ownerId, folder.folderId); } catch { /* keep the persistence error */ }
+      throw error;
+    }
     return this.toSummary(album, 0);
   }
 
@@ -170,6 +181,9 @@ export class AlbumsService {
       photoCount,
       createdAt: album.createdAt,
       updatedAt: album.updatedAt,
+      ...(album.driveFolderId
+        ? { driveFolderId: album.driveFolderId, uploadTarget: { provider: 'google-drive' as const, folderId: album.driveFolderId } }
+        : {}),
     };
   }
 }

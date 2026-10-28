@@ -33,6 +33,8 @@ class AlbumSummary {
     required this.photoCount,
     required this.createdAt,
     required this.updatedAt,
+    this.driveFolderId,
+    this.uploadTarget,
   });
 
   final String id;
@@ -41,6 +43,8 @@ class AlbumSummary {
   final int photoCount;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final String? driveFolderId;
+  final AlbumUploadTarget? uploadTarget;
 
   factory AlbumSummary.fromJson(Map<String, dynamic> json) => AlbumSummary(
     id: json['id'] as String,
@@ -49,7 +53,26 @@ class AlbumSummary {
     photoCount: json['photoCount'] as int,
     createdAt: DateTime.parse(json['createdAt'] as String),
     updatedAt: DateTime.parse(json['updatedAt'] as String),
+    driveFolderId: json['driveFolderId'] as String?,
+    uploadTarget: json['uploadTarget'] is Map<String, dynamic>
+        ? AlbumUploadTarget.fromJson(
+            json['uploadTarget'] as Map<String, dynamic>,
+          )
+        : null,
   );
+}
+
+class AlbumUploadTarget {
+  const AlbumUploadTarget({required this.provider, required this.folderId});
+
+  final String provider;
+  final String folderId;
+
+  factory AlbumUploadTarget.fromJson(Map<String, dynamic> json) =>
+      AlbumUploadTarget(
+        provider: json['provider'] as String,
+        folderId: json['folderId'] as String,
+      );
 }
 
 /// One entry of `GET /api/v1/albums` — an [AlbumSummary] plus the caller's
@@ -63,6 +86,8 @@ class AlbumListItem extends AlbumSummary {
     required super.photoCount,
     required super.createdAt,
     required super.updatedAt,
+    super.driveFolderId,
+    super.uploadTarget,
     required this.role,
   });
 
@@ -78,6 +103,8 @@ class AlbumListItem extends AlbumSummary {
       createdAt: summary.createdAt,
       updatedAt: summary.updatedAt,
       role: AlbumRole.fromJson(json['role'] as String),
+      driveFolderId: summary.driveFolderId,
+      uploadTarget: summary.uploadTarget,
     );
   }
 }
@@ -99,6 +126,8 @@ class AlbumDetail extends AlbumSummary {
     required super.createdAt,
     required super.updatedAt,
     required this.photos,
+    super.driveFolderId,
+    super.uploadTarget,
   });
 
   final List<Photo> photos;
@@ -116,6 +145,8 @@ class AlbumDetail extends AlbumSummary {
       photos: rawPhotos
           .map((entry) => Photo.fromJson(entry as Map<String, dynamic>))
           .toList(),
+      driveFolderId: summary.driveFolderId,
+      uploadTarget: summary.uploadTarget,
     );
   }
 }

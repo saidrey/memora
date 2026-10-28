@@ -30,6 +30,7 @@ export interface GoogleAuthClient {
    */
   exchangeServerAuthCode(
     serverAuthCode: string,
+    redirectUri?: string,
   ): Promise<GoogleTokenExchangeResult>;
 
   /**

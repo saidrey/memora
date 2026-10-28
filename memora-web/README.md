@@ -1,55 +1,33 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Memora Web
 
-## Capa de acceso a la API
+MVP web de Memora con Next.js App Router y lenguaje visual Aurora light-first.
 
-Implementa `specs/memora-web/spec01-fundacion-web.md`. Toda comunicación con
-`memora-backend` pasa por `src/lib/api/`:
+## Incluye
 
-- **`config.ts`** — `getApiBaseUrl()` lee `NEXT_PUBLIC_API_BASE_URL` (con
-  fallback a `http://localhost:3000/api/v1`, el default local del backend).
-  Configúrala copiando `.env.example` a `.env.local`.
-- **`client.ts`** — `apiFetch<T>(path, options)`, único punto de entrada
-  HTTP hacia el backend. Antepone la base URL, exige `no-store` por defecto
-  (nada de datos cacheados obsoletos) y normaliza cualquier error (de red o
-  HTTP no-2xx) a `ApiError` con `{ code, message, requestId, status }`.
-  Ningún otro archivo debe usar `fetch` directo contra el backend.
-- **`health.ts`** — `getHealth()`: `GET /api/v1/health` a través de
-  `apiFetch`.
-- **`errors.ts`** — tipo `ApiErrorBody` (formato uniforme de
-  `global/spec02-contrato-api.md`) y la clase `ApiError`.
+- Login Google Identity Services con code client, `drive.file` y sesión Memora persistida en `localStorage`.
+- Refresh automático ante 401 y logout.
+- Dashboard de álbumes propios/colaborativos, creación y detalle.
+- Fotos con bytes descargados directamente desde Google Drive usando el token efímero del backend.
+- Colaboradores, invitaciones y enlace de compartición.
+- Visor público sin login en `/s/[token]` y aceptación de invitaciones en `/invite/[token]`.
 
-`src/app/page.tsx` es la vista mínima: un Server Component que llama a
-`getHealth()` y muestra "Backend: ok" o "Backend: no disponible" (con el
-motivo). No es una pantalla diseñada — la identidad visual de Memora está
-pendiente de una spec/decisión aparte.
+Toda llamada al backend pasa por `src/lib/api/`. La única excepción es la descarga de bytes desde `googleapis.com`, encapsulada en `src/lib/api/drive.ts`.
 
-## Desarrollo
+## Configuración
 
 ```bash
-cp .env.example .env.local   # ajusta NEXT_PUBLIC_API_BASE_URL si hace falta
-npm run dev
+cp .env.example .env.local
+# Configura NEXT_PUBLIC_GOOGLE_CLIENT_ID y NEXT_PUBLIC_API_BASE_URL
+PORT=3001 npm run dev
+```
+
+En Google Cloud Console, configura el origen autorizado de la web y habilita los scopes `openid email profile drive.file`. El Web Client ID es configuración pública, no un secreto.
+
+## Verificación
+
+```bash
+npm run lint
 npm run build
 ```
 
-`next dev` y `memora-backend` (`start:dev`) usan el puerto 3000 por
-defecto — si corres ambos a la vez localmente, arranca uno en otro puerto,
-p. ej. `PORT=3001 npm run dev`.
-
----
-
-Getting started (plantilla original de `create-next-app`):
-
-```bash
-npm run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+El backend local corre por defecto en `http://localhost:3000`; la web usa `PORT=3001` para evitar la colisión.

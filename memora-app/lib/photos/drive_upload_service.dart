@@ -22,11 +22,8 @@ class DriveUploadException implements Exception {
 /// memora-backend. Per spec03-fotografias.md decision 5, it's treated as a
 /// plain HTTP endpoint via `package:http` — no Google Drive SDK is added.
 ///
-/// Decision 1 (approved): all uploads go into a single "Memora" folder in
-/// "My Drive" (no per-album folders — albums are a Memora-only concept).
-/// The folder's `fileId` is cached on this instance so a batch (and any
-/// later batch reusing the same service instance) doesn't repeat the
-/// search/create round-trip.
+/// Personal uploads go into a single "Memora" folder in "My Drive". Album
+/// uploads can provide a backend-resolved parent folder and skip that lookup.
 class DriveUploadService {
   DriveUploadService({http.Client? httpClient})
     : _httpClient = httpClient ?? http.Client();
@@ -52,8 +49,9 @@ class DriveUploadService {
     required Uint8List bytes,
     required String fileName,
     required String mimeType,
+    String? parentFolderId,
   }) async {
-    final folderId = await _ensureMemoraFolderId(accessToken);
+    final folderId = parentFolderId ?? await _ensureMemoraFolderId(accessToken);
 
     const boundary = 'memora-drive-upload-boundary';
     final metadata = jsonEncode({

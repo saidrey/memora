@@ -59,6 +59,14 @@ carpeta (ahí se documenta el avance porque `specs/` no se edita).
   hace falta `NSPhotoLibraryUsageDescription` en `Info.plist` (por política
   de App Store), aunque llamando `pickMultiImage(requestFullMetadata:
   false)` el `PHPicker` de iOS 14+ no llega a pedir el permiso en runtime.
+- **Las subidas de álbum usan autorización folder-scoped**: para un lote con
+  `albumId`, `PhotoUploadController` llama a `GET
+  /api/v1/photos/upload-authorization/:albumId` mediante `DriveTokenApi` y
+  usa el `folderId` devuelto solo como `parents` en el multipart directo a
+  Google Drive. No enviar ese id desde la UI ni usar el antiguo `POST
+  /auth/drive-token` en ese flujo; ese endpoint queda para biblioteca personal.
+  El token/folder se cachea únicamente durante la operación y se descarta al
+  terminar.
 - **`GET /api/v1/albums` responde un array JSON suelto** (`AlbumListItem[]`),
   no un objeto — a diferencia de todos los demás endpoints que esta app
   consumía hasta spec04 (siempre `Map<String, dynamic>`). `ApiClient` tenía

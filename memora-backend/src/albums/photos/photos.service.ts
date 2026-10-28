@@ -1,4 +1,4 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { requireOwned } from '../../common/authorization/require-owned';
 import {
   ALBUM_REPOSITORY,
@@ -6,6 +6,7 @@ import {
 } from '../album-repository.interface';
 import { AlbumAccessService } from '../collaborators/album-access.service';
 import { Photo, PhotoAvailability, StorageProvider } from './photo.model';
+import { ALBUM_STORAGE, AlbumStorage, NoopAlbumStorage } from '../storage/album-storage.interface';
 import {
   PHOTO_REPOSITORY,
   PhotoRepository,
@@ -46,6 +47,7 @@ export class PhotosService {
     @Inject(PHOTO_REPOSITORY) private readonly photos: PhotoRepository,
     @Inject(ALBUM_REPOSITORY) private readonly albums: AlbumRepository,
     private readonly albumAccess: AlbumAccessService,
+    @Optional() @Inject(ALBUM_STORAGE) private readonly albumStorage: AlbumStorage = new NoopAlbumStorage(),
   ) {}
 
   /** Registers a photo the client already uploaded to the storage provider —
@@ -57,7 +59,7 @@ export class PhotosService {
     if (input.albumId) {
       // Owner OR collaborator may contribute — membership, not ownership,
       // of the ALBUM (spec05). Ownership of the PHOTO itself is unaffected.
-      await this.albumAccess.requireMembership(input.albumId, ownerId);
+      const { album } = await this.albumAccess.requireMembership(input.albumId, ownerId);
     }
 
     const photo = await this.photos.create({
@@ -78,6 +80,12 @@ export class PhotosService {
     }
 
     return photo;
+  }
+
+  async getUploadAuthorization(userId: string, albumId: string) {
+    const { album } = await this.albumAccess.requireMembership(albumId, userId);
+    if (!album.driveFolderId) throw new NotFoundException('Destino de subida no encontrado');
+    return this.albumStorage.getUploadAuthorization(userId, album.driveFolderId);
   }
 
   /** Associates an EXISTING, own photo to an album the caller can contribute
